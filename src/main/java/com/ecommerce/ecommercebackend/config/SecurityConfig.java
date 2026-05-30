@@ -4,6 +4,7 @@ import com.ecommerce.ecommercebackend.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -50,6 +51,9 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
+                        // Public catalog browsing: anyone can read products.
+                        .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
+                        // Catalog management (create/update/delete) requires a logged-in user.
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())

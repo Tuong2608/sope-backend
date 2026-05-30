@@ -35,6 +35,17 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.BAD_REQUEST, "Registration Failed", ex.getMessage());
     }
 
+    /**
+     * Handles lookups for products (or other resources) that do not exist.
+     * Returns HTTP 404 Not Found.
+     */
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleResourceNotFound(
+            ResourceNotFoundException ex) {
+
+        return buildResponse(HttpStatus.NOT_FOUND, "Resource Not Found", ex.getMessage());
+    }
+
     // ── Spring Security exceptions ────────────────────────────────────────────
 
     /**
