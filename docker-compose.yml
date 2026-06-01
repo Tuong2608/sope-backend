@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # CONTAINER 1: Cơ sở dữ liệu MySQL
+  db:
+    image: mysql:8.0
+    container_name: ecommerce-mysql-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 12345
+      MYSQL_DATABASE: ecommerce_db
+    ports:
+      - "3306:3306"          # Mở cổng 3306 để bạn có thể kết nối từ máy ngoài qua DBeaver/Navicat
+    volumes:
+      - mysql_data:/var/lib/mysql # Lưu trữ dữ liệu bền vững, không bị mất khi tắt container
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p12345"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # CONTAINER 2: Ứng dụng Backend Spring Boot
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ecommerce-backend-app
+    restart: always
+    ports:
+      - "8080:8080"          # Ánh xạ cổng 8080 từ container ra cổng 8080 trên máy thật (Host)
+    depends_on:
+      db:
+        condition: service_healthy # Chỉ khởi động Spring Boot khi MySQL đã thực sự sẵn sàng
+    environment:
+      # Ghi đè cấu hình spring.datasource từ file application.properties
+      # Chú ý: url thay đổi từ "localhost" thành tên service "db" của container MySQL
+      - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/ecommerce_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=12345
+    networks:
+      - ecommerce-network
+
+# ────────────────────────────────────────────────────────────────────────
+# KHAI BÁO MẠNG NỘI BỘ (NETWORKS) & DỮ LIỆU BỀN VỮNG (VOLUMES)
+# ────────────────────────────────────────────────────────────────────────
+networks:
+  ecommerce-network:
+    driver: bridge          # Tạo một mạng ảo bridge nội bộ để db và app kết nối bảo mật với nhau
+
+volumes:
+  mysql_data:
+    driver: local           # Tạo ổ đĩa lưu trữ cục bộ cho MySQL
