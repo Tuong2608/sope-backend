@@ -53,6 +53,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         // Public catalog browsing: anyone can read products.
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
+                        // Payment callbacks/IPN — called by VNPAY/MoMo servers, no JWT available.
+                        .requestMatchers("/api/payment/vnpay/callback", "/api/payment/vnpay/ipn",
+                                         "/api/payment/momo/callback",  "/api/payment/momo/ipn").permitAll()
                         // Catalog management (create/update/delete) requires a logged-in user.
                         .anyRequest().authenticated()
                 )
