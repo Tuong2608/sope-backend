@@ -72,22 +72,60 @@ public class PaymentService {
     /**
      * Xử lý IPN (Instant Payment Notification) từ VNPAY.
      *
-     * <p>Xác thực chữ ký → cập nhật trạng thái Payment trong DB.
-     * Gọi bởi VNPAY server, không qua trình duyệt người dùng.</p>
+     * <p>Các bước xác thực theo thứ tự:
+     * <ol>
+     *   <li>Xác thực chữ ký HMAC-SHA512</li>
+     *   <li><b>Idempotency</b> — bỏ qua nếu giao dịch đã được xử lý (status != PENDING)</li>
+     *   <li><b>Amount Validation</b> — số tiền trong IPN phải khớp với DB</li>
+     *   <li>Cập nhật trạng thái</li>
+     * </ol>
+     * </p>
      *
      * @param params Tham số VNPAY gửi qua IPN
      */
     @Transactional
     public void handleVnpayIpn(Map<String, String> params) {
+        // Bước 1: Xác thực chữ ký
         if (!vnpayService.verifySignature(params)) {
             log.warn("[VNPAY IPN] Chữ ký không hợp lệ — bỏ qua");
             return;
         }
+
         // vnp_TxnRef = orderId_timestamp
         String txnRef  = params.getOrDefault("vnp_TxnRef", "");
         String orderId = txnRef.contains("_") ? txnRef.substring(0, txnRef.lastIndexOf('_')) : txnRef;
 
         paymentRepository.findByOrderId(orderId).ifPresent(payment -> {
+
+            // Bước 2: Idempotency — chỉ xử lý nếu đang PENDING
+            // VNPAY có thể gọi IPN nhiều lần (retry). Nếu đã xử lý rồi thì bỏ qua.
+            if (payment.getStatus() != PaymentStatus.PENDING) {
+                log.info("[VNPAY IPN] Giao dịch #{} đã được xử lý (status={}), bỏ qua IPN trùng lặp",
+                        payment.getId(), payment.getStatus());
+                return;
+            }
+
+            // Bước 3: Amount Validation
+            // VNPAY gửi vnp_Amount = số tiền * 100 (đơn vị 1/100 VND)
+            String vnpAmountStr = params.getOrDefault("vnp_Amount", "0");
+            long   vnpAmount;
+            try {
+                vnpAmount = Long.parseLong(vnpAmountStr) / 100; // chuyển về VND
+            } catch (NumberFormatException e) {
+                log.warn("[VNPAY IPN] vnp_Amount không hợp lệ: '{}'", vnpAmountStr);
+                return;
+            }
+
+            if (vnpAmount != payment.getAmount()) {
+                log.warn("[VNPAY IPN] Amount không khớp! DB={} VND, IPN={} VND (orderId={})",
+                        payment.getAmount(), vnpAmount, orderId);
+                // Đánh dấu FAILED để tránh xử lý tiếp
+                payment.setStatus(PaymentStatus.FAILED);
+                paymentRepository.save(payment);
+                return;
+            }
+
+            // Bước 4: Cập nhật trạng thái
             PaymentStatus newStatus = vnpayService.resolveStatus(params);
             String        txnId     = vnpayService.extractTransactionId(params);
             payment.setStatus(newStatus);
@@ -102,19 +140,37 @@ public class PaymentService {
     /**
      * Xử lý IPN (notify_url) từ MoMo.
      *
-     * <p>Xác thực chữ ký → cập nhật trạng thái Payment trong DB.</p>
+     * <p>Các bước xác thực theo thứ tự:
+     * <ol>
+     *   <li>Xác thực chữ ký HMAC-SHA256</li>
+     *   <li><b>Idempotency</b> — bỏ qua nếu giao dịch đã được xử lý (status != PENDING)</li>
+     *   <li>Cập nhật trạng thái</li>
+     * </ol>
+     * </p>
      *
      * @param params Tham số MoMo gửi qua IPN
      */
     @Transactional
     public void handleMomoIpn(Map<String, String> params) {
+        // Bước 1: Xác thực chữ ký
         if (!momoService.verifySignature(params)) {
             log.warn("[MOMO IPN] Chữ ký không hợp lệ — bỏ qua");
             return;
         }
+
         String orderId = params.getOrDefault("orderId", "");
 
         paymentRepository.findByOrderId(orderId).ifPresent(payment -> {
+
+            // Bước 2: Idempotency — chỉ xử lý nếu đang PENDING
+            // MoMo có thể gọi IPN nhiều lần nếu backend không trả về đúng format.
+            if (payment.getStatus() != PaymentStatus.PENDING) {
+                log.info("[MOMO IPN] Giao dịch #{} đã được xử lý (status={}), bỏ qua IPN trùng lặp",
+                        payment.getId(), payment.getStatus());
+                return;
+            }
+
+            // Bước 3: Cập nhật trạng thái
             PaymentStatus newStatus = momoService.resolveStatus(params);
             String        txnId     = momoService.extractTransactionId(params);
             payment.setStatus(newStatus);
