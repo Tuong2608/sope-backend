@@ -1,0 +1,30 @@
+package com.ecommerce.ecommercebackend.dto.request;
+
+import com.ecommerce.ecommercebackend.entity.PaymentMethod;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+
+/**
+ * Request payload for placing an order.
+ *
+ * <p>Line items are <strong>not</strong> supplied here — they are taken from
+ * the authenticated user's current cart.</p>
+ */
+@Data
+public class CreateOrderRequest {
+
+    @NotBlank(message = "recipientName is required")
+    private String recipientName;
+
+    @NotBlank(message = "phone is required")
+    private String phone;
+
+    @NotBlank(message = "shippingAddress is required")
+    private String shippingAddress;
+
+    private String note;
+
+    @NotNull(message = "paymentMethod is required (COD, VNPAY or MOMO)")
+    private PaymentMethod paymentMethod;
+}

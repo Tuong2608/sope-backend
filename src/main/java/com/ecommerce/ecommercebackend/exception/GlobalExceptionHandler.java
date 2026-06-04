@@ -46,6 +46,15 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, "Resource Not Found", ex.getMessage());
     }
 
+    /**
+     * Handles semantically invalid requests (e.g. ordering with an empty cart,
+     * cancelling a non-pending order). Returns HTTP 400 Bad Request.
+     */
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<ErrorResponse> handleBadRequest(BadRequestException ex) {
+        return buildResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
     // ── Spring Security exceptions ────────────────────────────────────────────
 
     /**
