@@ -30,7 +30,7 @@ public class ProductController {
 
     /** Sortable fields, whitelisted to reject arbitrary/invalid property names. */
     private static final Set<String> ALLOWED_SORT_FIELDS =
-            Set.of("id", "name", "price", "oldPrice", "category", "brand");
+            Set.of("id", "sku", "name", "price", "oldPrice", "category", "brand");
 
     // ── Create ────────────────────────────────────────────────────────────────
 

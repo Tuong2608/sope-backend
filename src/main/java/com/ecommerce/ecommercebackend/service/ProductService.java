@@ -15,7 +15,9 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 
 /**
  * Application service encapsulating product catalog business logic:
@@ -99,33 +101,75 @@ public class ProductService {
                         "Product not found with id: " + id));
     }
 
-    /** Copies request fields onto the entity, parsing formatted prices. */
+    /** Copies request fields onto the entity, parsing prices and flattening brand. */
     private void applyRequest(Product product, ProductRequest request) {
+        product.setSku(request.getSku());
         product.setName(request.getName());
         product.setCategory(request.getCategory());
-        product.setBrand(request.getBrand());
+        product.setBrand(flattenBrand(request.getBrand()));
+        product.setShortDescription(request.getShortDescription());
+        product.setDescription(request.getDescription());
         product.setPrice(PriceParser.parse(request.getPrice()));
         product.setOldPrice(PriceParser.parse(request.getOldPrice()));
-        product.setDescription(request.getDescription());
-        product.setImgUrl(request.getImgUrl());
         product.setUrl(request.getUrl());
+
+        List<String> images = (request.getImages() == null)
+                ? new ArrayList<>()
+                : new ArrayList<>(request.getImages());
+        product.setImages(images);
+        product.setImgUrl(images.isEmpty() ? null : images.get(0));
+
         product.setSpecs(request.getSpecs() == null
                 ? new LinkedHashMap<>()
                 : new LinkedHashMap<>(request.getSpecs()));
+        product.setStorageVariants(request.getStorageVariants() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(request.getStorageVariants()));
+        product.setColorVariants(request.getColorVariants() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(request.getColorVariants()));
+        product.setReviews(request.getReviews() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(request.getReviews()));
+    }
+
+    /** Flattens the crawl's nested brand array (e.g. [["iPad (Apple)"]]) to a string. */
+    private String flattenBrand(List<List<String>> brand) {
+        if (brand == null || brand.isEmpty()) {
+            return null;
+        }
+        List<String> leaves = new ArrayList<>();
+        for (List<String> inner : brand) {
+            if (inner == null) {
+                continue;
+            }
+            for (String value : inner) {
+                if (value != null && !value.isBlank()) {
+                    leaves.add(value.trim());
+                }
+            }
+        }
+        return leaves.isEmpty() ? null : String.join(", ", leaves);
     }
 
     private ProductResponse toResponse(Product product) {
         return ProductResponse.builder()
                 .id(product.getId())
+                .sku(product.getSku())
                 .name(product.getName())
                 .category(product.getCategory())
                 .brand(product.getBrand())
+                .shortDescription(product.getShortDescription())
+                .description(product.getDescription())
                 .price(product.getPrice())
                 .oldPrice(product.getOldPrice())
-                .description(product.getDescription())
-                .imgUrl(product.getImgUrl())
                 .url(product.getUrl())
+                .imgUrl(product.getImgUrl())
+                .images(product.getImages())
                 .specs(product.getSpecs())
+                .storageVariants(product.getStorageVariants())
+                .colorVariants(product.getColorVariants())
+                .reviews(product.getReviews())
                 .build();
     }
 }
