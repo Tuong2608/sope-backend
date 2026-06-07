@@ -1,6 +1,4 @@
-# =========================================================================
 # GIAI ĐOẠN 1: Build mã nguồn bằng JDK 17 và Maven Wrapper
-# =========================================================================
 FROM eclipse-temurin:17-jdk-alpine AS build
 
 WORKDIR /app
@@ -22,9 +20,7 @@ COPY src ./src
 # Tiến hành đóng gói code thành file .jar (Bỏ qua chạy Unit Test để build nhanh hơn)
 RUN ./mvnw clean package -DskipTests
 
-# =========================================================================
 # GIAI ĐOẠN 2: Chạy ứng dụng bằng JRE 17 tối giản (Nhẹ và Bảo mật)
-# =========================================================================
 FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
