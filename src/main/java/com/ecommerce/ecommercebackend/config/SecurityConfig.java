@@ -56,6 +56,9 @@ public class SecurityConfig {
                         // Payment callbacks/IPN — called by VNPAY/MoMo servers, no JWT available.
                         .requestMatchers("/api/payment/vnpay/callback", "/api/payment/vnpay/ipn",
                                          "/api/payment/momo/callback",  "/api/payment/momo/ipn").permitAll()
+                        // Chatbot (FastAPI) pushes messages server-to-server without a JWT.
+                        // NOTE: phase-1 simplicity — secure with a shared API key in a later phase.
+                        .requestMatchers(HttpMethod.POST, "/api/chat/save").permitAll()
                         // Catalog management (create/update/delete) requires a logged-in user.
                         .anyRequest().authenticated()
                 )
