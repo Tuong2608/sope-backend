@@ -80,6 +80,30 @@ public class JwtTokenProvider {
         }
     }
 
+    /**
+     * Validates a token without a specific user — used by the WebSocket interceptor
+     * when {@link UserDetails} is not yet available at STOMP CONNECT time.
+     *
+     * @param token JWT string
+     * @return {@code true} if the token is well-formed, signed correctly, and not expired
+     */
+    public boolean validateToken(String token) {
+        try {
+            parseClaims(token); // throws if invalid or expired
+            return true;
+        } catch (JwtException | IllegalArgumentException e) {
+            log.warn("JWT validation failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Alias for {@link #extractUsername(String)} — used by the WebSocket interceptor.
+     */
+    public String getUsernameFromToken(String token) {
+        return extractUsername(token);
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private boolean isTokenExpired(String token) {

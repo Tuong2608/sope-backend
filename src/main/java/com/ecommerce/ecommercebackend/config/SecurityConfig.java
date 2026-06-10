@@ -57,8 +57,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/payment/vnpay/callback", "/api/payment/vnpay/ipn",
                                          "/api/payment/momo/callback",  "/api/payment/momo/ipn").permitAll()
                         // Chatbot (FastAPI) pushes messages server-to-server without a JWT.
-                        // NOTE: phase-1 simplicity — secure with a shared API key in a later phase.
                         .requestMatchers(HttpMethod.POST, "/api/chat/save").permitAll()
+                        // WebSocket handshake endpoints — JWT auth happens inside STOMP CONNECT.
+                        .requestMatchers("/ws/**", "/ws-sockjs/**").permitAll()
+                        // REST helper to get room info (public — no sensitive data).
+                        .requestMatchers(HttpMethod.GET, "/api/ws/room/**").permitAll()
                         // Catalog management (create/update/delete) requires a logged-in user.
                         .anyRequest().authenticated()
                 )
