@@ -54,6 +54,11 @@ public class User implements UserDetails {
     @Column(nullable = false, length = 20)
     private Role role;
 
+    /** Whether the account is active; admins can lock/unlock it. */
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    @Builder.Default
+    private boolean enabled = true;
+
     // ── UserDetails contract ──────────────────────────────────────────────────
 
     @Override
@@ -71,5 +76,5 @@ public class User implements UserDetails {
     public boolean isCredentialsNonExpired() { return true; }
 
     @Override
-    public boolean isEnabled() { return true; }
+    public boolean isEnabled() { return enabled; }
 }

@@ -144,6 +144,37 @@ public class OrderService {
         orderRepository.save(order);
     }
 
+    // ── Admin operations ──────────────────────────────────────────────────────────
+
+    /** All orders (optionally filtered by status), newest first. */
+    @Transactional(readOnly = true)
+    public List<OrderResponse> getAllOrders(OrderStatus status) {
+        List<Order> orders = (status == null)
+                ? orderRepository.findAllByOrderByCreatedAtDesc()
+                : orderRepository.findByStatusOrderByCreatedAtDesc(status);
+        return orders.stream().map(this::toResponse).toList();
+    }
+
+    /** Any order by id, regardless of owner (admin). */
+    @Transactional(readOnly = true)
+    public OrderResponse getAnyOrder(Long id) {
+        return toResponse(findAnyOrThrow(id));
+    }
+
+    /** Admin sets an order's status to any value. */
+    @Transactional
+    public OrderResponse updateStatus(Long id, OrderStatus status) {
+        Order order = findAnyOrThrow(id);
+        order.setStatus(status);
+        return toResponse(orderRepository.save(order));
+    }
+
+    private Order findAnyOrThrow(Long id) {
+        return orderRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Order not found with id: " + id));
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
     /** Generates "ORD-yyyyMMdd-XXXXXX", retrying on the rare collision. */

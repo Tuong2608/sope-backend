@@ -51,15 +51,23 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
-                        // Public catalog browsing: anyone can read products.
+                        // Public catalog browsing: anyone can read products and their reviews.
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
+                        // Interaction dataset for the AI recommendation engine (service-to-service).
+                        .requestMatchers(HttpMethod.GET, "/api/ratings").permitAll()
                         // Payment callbacks/IPN — called by VNPAY/MoMo servers, no JWT available.
                         .requestMatchers("/api/payment/vnpay/callback", "/api/payment/vnpay/ipn",
                                          "/api/payment/momo/callback",  "/api/payment/momo/ipn").permitAll()
                         // Chatbot (FastAPI) pushes messages server-to-server without a JWT.
                         // NOTE: phase-1 simplicity — secure with a shared API key in a later phase.
                         .requestMatchers(HttpMethod.POST, "/api/chat/save").permitAll()
-                        // Catalog management (create/update/delete) requires a logged-in user.
+                        // Admin area: only ROLE_ADMIN.
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // Catalog management (create/update/delete) is admin-only; GET stays public.
+                        .requestMatchers(HttpMethod.POST,   "/api/products/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT,    "/api/products/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("ADMIN")
+                        // Everything else requires a logged-in user.
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
