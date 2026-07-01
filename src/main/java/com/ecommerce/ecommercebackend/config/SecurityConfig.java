@@ -19,19 +19,10 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import java.util.List;
 
-/**
- * Modern, component-based Spring Security configuration.
- *
- * <p>Key decisions:
- * <ul>
- *   <li>CSRF disabled – API is stateless; CSRF tokens are meaningless without sessions.</li>
- *   <li>Session policy STATELESS – no {@code HttpSession} is ever created or used.</li>
- *   <li>{@link JwtAuthenticationFilter} runs before
- *       {@link UsernamePasswordAuthenticationFilter} so every request is pre-authenticated.</li>
- * </ul>
- * </p>
- */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -41,28 +32,26 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final UserDetailsService      userDetailsService;
 
-    // ── Security filter chain ─────────────────────────────────────────────────
-
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
+                // Thêm cấu hình CORS tại đây
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
-                        // Public catalog browsing: anyone can read products.
+                        // Public catalog browsing: ai cũng có thể xem sản phẩm
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
-                        // Payment callbacks/IPN — called by VNPAY/MoMo servers, no JWT available.
+                        .requestMatchers(HttpMethod.GET, "/api/recommendations/**").permitAll()
+                        // Payment callbacks/IPN
                         .requestMatchers("/api/payment/vnpay/callback", "/api/payment/vnpay/ipn",
                                          "/api/payment/momo/callback",  "/api/payment/momo/ipn").permitAll()
-                        // Chatbot (FastAPI) pushes messages server-to-server without a JWT.
                         .requestMatchers(HttpMethod.POST, "/api/chat/save").permitAll()
-                        // WebSocket handshake endpoints — JWT auth happens inside STOMP CONNECT.
                         .requestMatchers("/ws/**", "/ws-sockjs/**").permitAll()
-                        // REST helper to get room info (public — no sensitive data).
                         .requestMatchers(HttpMethod.GET, "/api/ws/room/**").permitAll()
-                        // Catalog management (create/update/delete) requires a logged-in user.
+                        // Các request khác (thêm sản phẩm, sửa, xóa, đặt hàng...) bắt buộc đăng nhập
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
@@ -70,16 +59,21 @@ public class SecurityConfig {
                 .build();
     }
 
-    // ── Authentication beans ──────────────────────────────────────────────────
+    // Bean định nghĩa cấu hình CORS cho phép Frontend gọi vào Backend
+    @Bean
+    public UrlBasedCorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOriginPatterns(List.of("*")); // Hoặc điền chính xác url frontend của bạn như: List.of("http://localhost:3000")
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Cache-Control"));
+        configuration.setAllowCredentials(true);
+        
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
 
-    /**
-     * {@link DaoAuthenticationProvider} wires together the password encoder
-     * and {@link UserDetailsService} for username/password authentication.
-     *
-     * <p>Spring Security 6.x (Spring Boot 4) changed the constructor to require
-     * {@link UserDetailsService} as a mandatory argument; the
-     * {@code setUserDetailsService()} setter was removed.</p>
-     */
+    // ── Authentication beans phía dưới giữ nguyên ──────────────────────────────
     @Bean
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
@@ -87,10 +81,6 @@ public class SecurityConfig {
         return provider;
     }
 
-    /**
-     * Exposes the {@link AuthenticationManager} bean so that the
-     * {@code AuthController} can inject and use it directly.
-     */
     @Bean
     public AuthenticationManager authenticationManager(
             AuthenticationConfiguration authConfig) throws Exception {

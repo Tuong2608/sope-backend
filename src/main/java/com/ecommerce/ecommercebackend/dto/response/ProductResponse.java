@@ -22,6 +22,7 @@ public class ProductResponse {
 
     private Long id;
     private String sku;
+    private String mainThumbnail;
     private String name;
     private String category;
     private String brand;

@@ -11,6 +11,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * JPA entity representing a product in the catalog.
  *
@@ -36,36 +38,47 @@ public class Product {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "main_thumbnail", length = 500)
+    @JsonProperty("main_thumbnail")
+    private String mainThumbnail;
     /** Source SKU from the crawl (e.g. "363417"). */
     @Column(length = 50)
+    @JsonProperty("sku")
     private String sku;
 
     /** Display name (crawl: {@code product_name}). */
     @Column(nullable = false, length = 255)
+    @JsonProperty("product_name")
     private String name;
 
     /** Category slug from the crawl (e.g. "tablet", "laptop"). */
     @Column(length = 100)
+    @JsonProperty("category")
     private String category;
 
     /** Brand, flattened from the crawl's nested array (e.g. "iPad (Apple)"). */
     @Column(length = 200)
+    @JsonProperty("brand")
     private String brand;
 
     /** Short marketing blurb (crawl: {@code short_description}). */
     @Column(name = "short_description", columnDefinition = "TEXT")
+    @JsonProperty("short_description")
     private String shortDescription;
 
     /** Full article/description (crawl: {@code detailed_article}). */
     @Column(columnDefinition = "LONGTEXT")
+    @JsonProperty("detailed_article")
     private String description;
 
     /** Current selling price in VND (crawl: {@code current_price}). */
     @Column
+    @JsonProperty("current_price")
     private Long price;
 
     /** Original/list price in VND (crawl: {@code original_price}). */
     @Column(name = "old_price")
+    @JsonProperty("original_price")
     private Long oldPrice;
 
     @Column(length = 500)
@@ -82,6 +95,7 @@ public class Product {
             joinColumns = @JoinColumn(name = "product_id"))
     @Column(name = "image_url", length = 500)
     @Builder.Default
+    @JsonProperty("infographic_images")
     private List<String> images = new ArrayList<>();
 
     /** Technical specs (crawl: {@code detailed_specs}). */
@@ -92,6 +106,7 @@ public class Product {
     @MapKeyColumn(name = "spec_key", length = 255)
     @Column(name = "spec_value", length = 1000)
     @Builder.Default
+    @JsonProperty("detailed_specs")
     private Map<String, String> specs = new LinkedHashMap<>();
 
     /** Storage/configuration options (crawl: {@code storage_variants}). */
@@ -100,6 +115,7 @@ public class Product {
             name = "product_storage_variants",
             joinColumns = @JoinColumn(name = "product_id"))
     @Builder.Default
+    @JsonProperty("storage_variants")
     private List<StorageVariant> storageVariants = new ArrayList<>();
 
     /** Colour options (crawl: {@code color_variants}). */
@@ -108,6 +124,7 @@ public class Product {
             name = "product_color_variants",
             joinColumns = @JoinColumn(name = "product_id"))
     @Builder.Default
+    @JsonProperty("color_variants")
     private List<ColorVariant> colorVariants = new ArrayList<>();
 
     /** Snapshot of source-site reviews (crawl: {@code customer_reviews}). */
@@ -116,5 +133,6 @@ public class Product {
             name = "product_reviews",
             joinColumns = @JoinColumn(name = "product_id"))
     @Builder.Default
+    @JsonProperty("customer_reviews")
     private List<CrawledReview> reviews = new ArrayList<>();
 }
