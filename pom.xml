@@ -83,6 +83,12 @@
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
+        <!-- WebSocket + STOMP for real-time chat -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+
         <!-- HMAC-SHA512/SHA256 for VNPAY + MoMo signature -->
         <dependency>
             <groupId>commons-codec</groupId>
