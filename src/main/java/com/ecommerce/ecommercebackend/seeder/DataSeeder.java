@@ -23,9 +23,9 @@ public class DataSeeder {
             if (productRepository.count() == 0) {
                 ObjectMapper mapper = new ObjectMapper();
                 mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-                InputStream inputStream = TypeReference.class.getResourceAsStream("/data_phone.json");
+                InputStream inputStream = TypeReference.class.getResourceAsStream("/data.json");
                 if (inputStream == null) {
-                    System.err.println("❌ Không tìm thấy file data_phone.json!");
+                    System.err.println("❌ Không tìm thấy file data.json!");
                     return;
                 }
 
@@ -76,7 +76,7 @@ public class DataSeeder {
                     
                     productRepository.saveAll(products);
                     
-                    System.out.println("✅ Import data từ data_phone.json thành công! Đã clean format tiền tệ.");
+                    System.out.println("✅ Import data từ data.json thành công! Đã clean format tiền tệ.");
                 } catch (Exception e) {
                     System.err.println("❌ Quá trình import thất bại. Lỗi chi tiết: " + e.getMessage());
                     e.printStackTrace();

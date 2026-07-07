@@ -2,6 +2,7 @@ package com.ecommerce.ecommercebackend.controller;
 
 import com.ecommerce.ecommercebackend.dto.request.PaymentRequest;
 import com.ecommerce.ecommercebackend.dto.response.PaymentResponse;
+import com.ecommerce.ecommercebackend.entity.User;
 import com.ecommerce.ecommercebackend.service.PaymentService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -9,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -46,11 +48,12 @@ public class PaymentController {
      */
     @PostMapping("/create")
     public ResponseEntity<PaymentResponse> createPayment(
+            @AuthenticationPrincipal User user,
             @Valid @RequestBody PaymentRequest request,
             HttpServletRequest httpRequest) {
 
         String ipAddress = getClientIp(httpRequest);
-        PaymentResponse response = paymentService.createPayment(request, ipAddress);
+        PaymentResponse response = paymentService.createPayment(user, request, ipAddress);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -61,8 +64,10 @@ public class PaymentController {
      * Yêu cầu JWT token.
      */
     @GetMapping("/{id}")
-    public ResponseEntity<PaymentResponse> getPayment(@PathVariable Long id) {
-        return ResponseEntity.ok(paymentService.getById(id));
+    public ResponseEntity<PaymentResponse> getPayment(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(paymentService.getById(user, id));
     }
 
     // ── VNPAY Callback (redirect từ trình duyệt) ─────────────────────────────

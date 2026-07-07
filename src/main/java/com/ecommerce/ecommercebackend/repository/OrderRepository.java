@@ -19,6 +19,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     /** A single order scoped to its owner (prevents cross-user access). */
     Optional<Order> findByIdAndUserId(Long id, Long userId);
 
+    /** Lookup by business key scoped to its owner. */
+    Optional<Order> findByOrderCodeAndUserId(String orderCode, Long userId);
+
     /** Lookup by the business key shared with the payment module. */
     Optional<Order> findByOrderCode(String orderCode);
 

@@ -15,12 +15,6 @@ import java.util.List;
 
 /**
  * A chat conversation = the "context package" (Gói ngữ cảnh) of one chatter.
- *
- * <p>The chatbot (Nhân's FastAPI) identifies the chatter only by a free-form
- * {@code userId} string (a logged-in user id or a guest tag like
- * "khach_hang_test"); there is no separate session id in the contract. We
- * therefore keep <em>one</em> session per {@code userId} and append every turn
- * to it, so the full history can be replayed as LLM context.</p>
  */
 @Entity
 @Table(
@@ -38,9 +32,10 @@ public class ChatSession {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** Free-form chatter identifier from the chatbot (user id or guest tag). */
-    @Column(name = "user_id", nullable = false, length = 100)
-    private String userId;
+    // Đã thay đổi từ String userId sang liên kết thực sự với entity User
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
