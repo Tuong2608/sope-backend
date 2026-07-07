@@ -47,7 +47,15 @@ public class ProductService {
     public ProductResponse getById(Long id) {
         return toResponse(findOrThrow(id));
     }
+    // ── Read (List by IDs for Recommendation) ──────────────────────────────────
 
+    @Transactional(readOnly = true)
+    public List<ProductResponse> getProductsByIds(List<Long> ids) {
+        return productRepository.findAllById(ids)
+                .stream()
+                .map(this::toResponse)
+                .toList(); // Nếu dùng Java bản cũ hơn 16, dùng .collect(Collectors.toList())
+    }
     // ── Read (search / filter / paginate) ───────────────────────────────────────
 
     /**
@@ -63,12 +71,25 @@ public class ProductService {
             Long maxPrice,
             Pageable pageable) {
 
-        Specification<Product> spec = Specification
-                .allOf(ProductSpecifications.nameContains(keyword))
-                .and(ProductSpecifications.categoryEquals(category))
-                .and(ProductSpecifications.brandContains(brand))
-                .and(ProductSpecifications.priceGreaterThanOrEqual(minPrice))
-                .and(ProductSpecifications.priceLessThanOrEqual(maxPrice));
+        // 1. KHỞI TẠO SPEC LUÔN ĐÚNG (Tránh hoàn toàn lỗi Null)
+        Specification<Product> spec = (root, query, cb) -> cb.conjunction();
+
+        // 2. Nối các điều kiện (Code của bạn đã viết rất chuẩn phần này)
+        if (keyword != null && !keyword.isBlank()) {
+            spec = spec.and(ProductSpecifications.nameContains(keyword));
+        }
+        if (category != null && !category.isBlank()) {
+            spec = spec.and(ProductSpecifications.categoryEquals(category));
+        }
+        if (brand != null && !brand.isBlank()) {
+            spec = spec.and(ProductSpecifications.brandContains(brand));
+        }
+        if (minPrice != null) {
+            spec = spec.and(ProductSpecifications.priceGreaterThanOrEqual(minPrice));
+        }
+        if (maxPrice != null) {
+            spec = spec.and(ProductSpecifications.priceLessThanOrEqual(maxPrice));
+        }
 
         Page<ProductResponse> page = productRepository.findAll(spec, pageable)
                 .map(this::toResponse);
@@ -117,7 +138,8 @@ public class ProductService {
                 ? new ArrayList<>()
                 : new ArrayList<>(request.getImages());
         product.setImages(images);
-        product.setImgUrl(images.isEmpty() ? null : images.get(0));
+        // Map trường mainThumbnail từ request vào entity
+        product.setMainThumbnail(request.getMainThumbnail());
 
         product.setSpecs(request.getSpecs() == null
                 ? new LinkedHashMap<>()
@@ -164,7 +186,7 @@ public class ProductService {
                 .price(product.getPrice())
                 .oldPrice(product.getOldPrice())
                 .url(product.getUrl())
-                .imgUrl(product.getImgUrl())
+                .mainThumbnail(product.getMainThumbnail()) // Đã cập nhật
                 .images(product.getImages())
                 .specs(product.getSpecs())
                 .storageVariants(product.getStorageVariants())

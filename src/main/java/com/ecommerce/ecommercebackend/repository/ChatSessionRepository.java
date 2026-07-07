@@ -13,7 +13,9 @@ import java.util.Optional;
 @Repository
 public interface ChatSessionRepository extends JpaRepository<ChatSession, Long> {
 
-    Optional<ChatSession> findByUserId(String userId);
+    Optional<ChatSession> findByUserUsername(String username);
+
+    Optional<ChatSession> findByUserId(Long userId);
 
     /** Sessions ordered by most-recent activity (for the seller dashboard). */
     List<ChatSession> findAllByOrderByUpdatedAtDesc();

@@ -1,5 +1,6 @@
 package com.ecommerce.ecommercebackend.controller;
 
+import com.ecommerce.ecommercebackend.dto.request.GoogleLoginRequest;
 import com.ecommerce.ecommercebackend.dto.request.LoginRequest;
 import com.ecommerce.ecommercebackend.dto.request.RegisterRequest;
 import com.ecommerce.ecommercebackend.dto.response.AuthResponse;
@@ -9,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 /**
  * REST controller exposing authentication endpoints.
@@ -47,5 +50,22 @@ public class AuthController {
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Authenticates a user with a Google Identity Services ID token.
+     *
+     * @param request Google credential payload from the frontend
+     * @return 200 OK with an application JWT
+     */
+    @PostMapping("/google")
+    public ResponseEntity<AuthResponse> googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
+        AuthResponse response = authService.loginWithGoogle(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/google/client-id")
+    public ResponseEntity<Map<String, String>> googleClientId() {
+        return ResponseEntity.ok(Map.of("clientId", authService.getGoogleClientId()));
     }
 }

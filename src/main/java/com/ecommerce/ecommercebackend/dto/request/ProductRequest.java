@@ -33,7 +33,7 @@ public class ProductRequest {
     private String name;
 
     private String category;
-
+    private String mainThumbnail;
     /** Crawl brand is nested, e.g. {@code [["iPad (Apple)"]]}; flattened in service. */
     private List<List<String>> brand = new ArrayList<>();
 

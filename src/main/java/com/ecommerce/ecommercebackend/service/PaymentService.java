@@ -2,10 +2,16 @@ package com.ecommerce.ecommercebackend.service;
 
 import com.ecommerce.ecommercebackend.dto.request.PaymentRequest;
 import com.ecommerce.ecommercebackend.dto.response.PaymentResponse;
+import com.ecommerce.ecommercebackend.entity.Order;
+import com.ecommerce.ecommercebackend.entity.OrderStatus;
 import com.ecommerce.ecommercebackend.entity.Payment;
+import com.ecommerce.ecommercebackend.entity.PaymentMethod;
 import com.ecommerce.ecommercebackend.entity.PaymentProvider;
 import com.ecommerce.ecommercebackend.entity.PaymentStatus;
+import com.ecommerce.ecommercebackend.entity.User;
+import com.ecommerce.ecommercebackend.exception.BadRequestException;
 import com.ecommerce.ecommercebackend.exception.ResourceNotFoundException;
+import com.ecommerce.ecommercebackend.repository.OrderRepository;
 import com.ecommerce.ecommercebackend.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Service điều phối toàn bộ luồng thanh toán.
@@ -26,6 +33,7 @@ import java.util.Map;
 public class PaymentService {
 
     private final PaymentRepository paymentRepository;
+    private final OrderRepository   orderRepository;
     private final VnpayService      vnpayService;
     private final MomoService       momoService;
 
@@ -40,23 +48,38 @@ public class PaymentService {
      * @return PaymentResponse chứa {@code paymentUrl}
      */
     @Transactional
-    public PaymentResponse createPayment(PaymentRequest request, String ipAddress) {
+    public PaymentResponse createPayment(User user, PaymentRequest request, String ipAddress) {
+        Order order = orderRepository.findByOrderCodeAndUserId(request.getOrderId(), user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Order not found with code: " + request.getOrderId()));
+
+        validatePaymentRequest(order, request);
+
+        var existingPending = paymentRepository.findFirstByOrderIdAndStatusOrderByCreatedAtDesc(
+                order.getOrderCode(),
+                PaymentStatus.PENDING
+        );
+        if (existingPending.isPresent()) {
+            return toResponse(existingPending.get());
+        }
+
         String paymentUrl;
+        Long amount = order.getTotalAmount();
+        String orderInfo = buildOrderInfo(request, order);
 
         if (request.getProvider() == PaymentProvider.VNPAY) {
             paymentUrl = vnpayService.createPaymentUrl(
-                    request.getOrderId(), request.getAmount(),
-                    request.getOrderInfo(), ipAddress);
+                    order.getOrderCode(), amount, orderInfo, ipAddress);
         } else {
             paymentUrl = momoService.createPaymentUrl(
-                    request.getOrderId(), request.getAmount(), request.getOrderInfo());
+                    order.getOrderCode(), amount, orderInfo);
         }
 
         Payment payment = Payment.builder()
-                .orderId(request.getOrderId())
-                .amount(request.getAmount())
+                .orderId(order.getOrderCode())
+                .amount(amount)
                 .provider(request.getProvider())
-                .orderInfo(request.getOrderInfo())
+                .orderInfo(orderInfo)
                 .status(PaymentStatus.PENDING)
                 .paymentUrl(paymentUrl)
                 .build();
@@ -95,7 +118,10 @@ public class PaymentService {
         String txnRef  = params.getOrDefault("vnp_TxnRef", "");
         String orderId = txnRef.contains("_") ? txnRef.substring(0, txnRef.lastIndexOf('_')) : txnRef;
 
-        paymentRepository.findByOrderId(orderId).ifPresent(payment -> {
+        paymentRepository.findFirstByOrderIdAndStatusOrderByCreatedAtDesc(
+                orderId,
+                PaymentStatus.PENDING
+        ).ifPresent(payment -> {
 
             // Bước 2: Idempotency — chỉ xử lý nếu đang PENDING
             // VNPAY có thể gọi IPN nhiều lần (retry). Nếu đã xử lý rồi thì bỏ qua.
@@ -131,6 +157,7 @@ public class PaymentService {
             payment.setStatus(newStatus);
             payment.setTransactionId(txnId);
             paymentRepository.save(payment);
+            markOrderPaidIfSuccessful(payment, newStatus);
             log.info("[VNPAY IPN] Cập nhật Payment #{} → {} (txnId={})", payment.getId(), newStatus, txnId);
         });
     }
@@ -160,7 +187,10 @@ public class PaymentService {
 
         String orderId = params.getOrDefault("orderId", "");
 
-        paymentRepository.findByOrderId(orderId).ifPresent(payment -> {
+        paymentRepository.findFirstByOrderIdAndStatusOrderByCreatedAtDesc(
+                orderId,
+                PaymentStatus.PENDING
+        ).ifPresent(payment -> {
 
             // Bước 2: Idempotency — chỉ xử lý nếu đang PENDING
             // MoMo có thể gọi IPN nhiều lần nếu backend không trả về đúng format.
@@ -171,11 +201,29 @@ public class PaymentService {
             }
 
             // Bước 3: Cập nhật trạng thái
+            String momoAmountStr = params.getOrDefault("amount", "0");
+            long momoAmount;
+            try {
+                momoAmount = Long.parseLong(momoAmountStr);
+            } catch (NumberFormatException e) {
+                log.warn("[MOMO IPN] amount khÃ´ng há»£p lá»‡: '{}'", momoAmountStr);
+                return;
+            }
+
+            if (momoAmount != payment.getAmount()) {
+                log.warn("[MOMO IPN] Amount khÃ´ng khá»›p! DB={} VND, IPN={} VND (orderId={})",
+                        payment.getAmount(), momoAmount, orderId);
+                payment.setStatus(PaymentStatus.FAILED);
+                paymentRepository.save(payment);
+                return;
+            }
+
             PaymentStatus newStatus = momoService.resolveStatus(params);
             String        txnId     = momoService.extractTransactionId(params);
             payment.setStatus(newStatus);
             payment.setTransactionId(txnId);
             paymentRepository.save(payment);
+            markOrderPaidIfSuccessful(payment, newStatus);
             log.info("[MOMO IPN] Cập nhật Payment #{} → {} (txnId={})", payment.getId(), newStatus, txnId);
         });
     }
@@ -190,13 +238,55 @@ public class PaymentService {
      * @throws ResourceNotFoundException nếu không tìm thấy
      */
     @Transactional(readOnly = true)
-    public PaymentResponse getById(Long id) {
+    public PaymentResponse getById(User user, Long id) {
         Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + id));
+        orderRepository.findByOrderCodeAndUserId(payment.getOrderId(), user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + id));
         return toResponse(payment);
     }
 
     // ── Mapping ───────────────────────────────────────────────────────────────
+
+    private void validatePaymentRequest(Order order, PaymentRequest request) {
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            throw new BadRequestException("Cannot create payment for a cancelled order.");
+        }
+        if (order.getStatus() == OrderStatus.PAID || order.getStatus() == OrderStatus.COMPLETED) {
+            throw new BadRequestException("Order has already been paid.");
+        }
+        if (order.getPaymentMethod() == PaymentMethod.COD) {
+            throw new BadRequestException("COD orders do not need an online payment link.");
+        }
+
+        PaymentProvider expectedProvider = PaymentProvider.valueOf(order.getPaymentMethod().name());
+        if (request.getProvider() != expectedProvider) {
+            throw new BadRequestException("Payment provider does not match the order payment method.");
+        }
+        if (!Objects.equals(request.getAmount(), order.getTotalAmount())) {
+            throw new BadRequestException("Payment amount does not match the order total.");
+        }
+    }
+
+    private String buildOrderInfo(PaymentRequest request, Order order) {
+        if (request.getOrderInfo() == null || request.getOrderInfo().isBlank()) {
+            return "Thanh toan don hang " + order.getOrderCode();
+        }
+        return request.getOrderInfo().trim();
+    }
+
+    private void markOrderPaidIfSuccessful(Payment payment, PaymentStatus status) {
+        if (status != PaymentStatus.SUCCESS) {
+            return;
+        }
+
+        orderRepository.findByOrderCode(payment.getOrderId()).ifPresent(order -> {
+            if (order.getStatus() == OrderStatus.PENDING) {
+                order.setStatus(OrderStatus.PAID);
+                orderRepository.save(order);
+            }
+        });
+    }
 
     private PaymentResponse toResponse(Payment p) {
         return PaymentResponse.builder()
