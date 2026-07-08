@@ -1,6 +1,7 @@
 package com.ecommerce.ecommercebackend.specification;
 
 import com.ecommerce.ecommercebackend.entity.Product;
+import jakarta.persistence.criteria.JoinType;
 import org.springframework.data.jpa.domain.Specification;
 
 public final class ProductSpecifications {
@@ -30,7 +31,9 @@ public final class ProductSpecifications {
         return (root, query, cb) -> {
             if (isBlank(brand)) return cb.conjunction();
             String pattern = "%" + brand.toLowerCase() + "%";
-            return cb.like(cb.lower(root.get("brand")), pattern);
+            return cb.or(
+                    cb.like(cb.lower(root.get("brand")), pattern),
+                    cb.like(cb.lower(root.get("name")), pattern));
         };
     }
 
@@ -45,6 +48,17 @@ public final class ProductSpecifications {
         return (root, query, cb) -> {
             if (maxPrice == null) return cb.conjunction();
             return cb.lessThanOrEqualTo(root.get("price"), maxPrice);
+        };
+    }
+
+    public static Specification<Product> storageContains(String storage) {
+        return (root, query, cb) -> {
+            if (isBlank(storage)) return cb.conjunction();
+            if (query != null) query.distinct(true);
+            String pattern = "%" + storage.toLowerCase() + "%";
+            return cb.like(
+                    cb.lower(root.join("storageVariants", JoinType.LEFT).get("storageName")),
+                    pattern);
         };
     }
 

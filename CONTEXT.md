@@ -312,3 +312,60 @@ Khi kiểm tra API cần ghi:
 - [ ] Ghi lại API product.
 - [ ] Ghi lại API phục vụ chatbot nếu có.
 - [ ] Ghi lại lỗi backend nếu phát sinh.
+
+---
+
+## Cap nhat 2026-07-08 - Auth Google va login/register
+
+- Yeu cau: kiem tra loi login/register thuong va Google login tu log trinh duyet.
+- Package lien quan: config, security, auth service/controller.
+- File da sua: `src/main/resources/application.properties`, `src/main/java/com/ecommerce/ecommercebackend/security/CustomUserDetailsService.java`.
+- Endpoint lien quan: `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/google`, `GET /api/auth/google/client-id`.
+- Noi dung thay doi: them `app.google.client-id` khop frontend; login bang email duoc normalize lower-case khi tim user.
+- Anh huong frontend: frontend Google button can dung client id khop backend.
+- Kiem tra: `mvn clean test -DskipTests` thanh cong.
+- Luu y: phai restart backend de nap lai `app.google.client-id`.
+
+---
+
+## Cap nhat 2026-07-08 - Xac nhan Google client id backend
+
+- Yeu cau: them lai Google client id cho dang nhap/dang ky Google.
+- File kiem tra: `src/main/resources/application.properties`.
+- Trang thai: `app.google.client-id` da co gia tri `953134505647-thn9ed73vuiao2g8nml0r4277fmikql0.apps.googleusercontent.com`.
+- Kiem tra: `mvn test -DskipTests` thanh cong.
+- Luu y: restart backend de nap lai cau hinh neu server dang chay.
+
+---
+
+## Cap nhat 2026-07-08 - CORS cho auth login/register
+
+- Yeu cau: sua loi frontend login hien `Failed to fetch` trong khi backend da start.
+- Package lien quan: `config`, `security`.
+- File da sua: `src/main/java/com/ecommerce/ecommercebackend/config/SecurityConfig.java`.
+- Endpoint lien quan: `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/google`, `GET /api/auth/google/client-id`.
+- Noi dung thay doi: them `.cors(Customizer.withDefaults())` va bean `CorsConfigurationSource` cho origin `http://localhost:3000`, `http://localhost:3001`, `http://127.0.0.1:3000`, `http://127.0.0.1:3001`.
+- Kiem tra: `mvn clean test -DskipTests` thanh cong.
+- Luu y: restart backend sau khi sua; neu frontend chay port khac thi them origin vao CORS.
+
+---
+
+## Cap nhat 2026-07-08 - Public recommendation API
+
+- Yeu cau: frontend bao loi fetch CBF khi tai san pham tuong tu o trang chi tiet.
+- Package lien quan: `config/security`.
+- File da sua: `src/main/java/com/ecommerce/ecommercebackend/config/SecurityConfig.java`.
+- Endpoint lien quan: `GET /api/recommendations/content-similar/{productId}`, `GET /api/recommendations/similar/{productId}`.
+- Noi dung thay doi: cho phep public `GET /api/recommendations/**` vi recommendation hien tren trang chi tiet san pham public.
+- Kiem tra: `mvn -q -DskipTests compile` thanh cong.
+- Luu y: restart backend de rule moi co hieu luc; neu service Python recommendation offline thi controller co the tra danh sach rong va frontend se an block goi y.
+
+---
+
+## Cap nhat 2026-07-08 - Product API storage filter
+
+- Yeu cau: ho tro loc san pham theo dung luong luu tru tu trang `/products`.
+- File da sua: `src/main/java/com/ecommerce/ecommercebackend/controller/ProductController.java`, `src/main/java/com/ecommerce/ecommercebackend/service/ProductService.java`, `src/main/java/com/ecommerce/ecommercebackend/specification/ProductSpecifications.java`.
+- Noi dung thay doi: them request param `storage`; them specification join `storageVariants.storageName`; brand filter co fallback match theo `name` de du lieu brand rong van loc duoc theo hang nam trong ten san pham.
+- Kiem tra: `mvn -q -DskipTests compile` thanh cong.
+- Luu y: restart backend de endpoint nhan `storage`; sap xep ban chay can du lieu doanh so/luot ban rieng.

@@ -70,6 +70,7 @@ public class ProductController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String brand,
+            @RequestParam(required = false) String storage,
             @RequestParam(required = false) Long minPrice,
             @RequestParam(required = false) Long maxPrice,
             @RequestParam(defaultValue = "0") int page,
@@ -88,7 +89,7 @@ public class ProductController {
                 Sort.by(direction, sortField));
 
         PagedResponse<ProductResponse> result = productService.search(
-                keyword, category, brand, minPrice, maxPrice, pageable);
+                keyword, category, brand, storage, minPrice, maxPrice, pageable);
 
         return ResponseEntity.ok(result);
     }

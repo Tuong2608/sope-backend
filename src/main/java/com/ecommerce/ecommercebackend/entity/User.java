@@ -24,7 +24,8 @@ import java.util.List;
         name = "users",
         uniqueConstraints = {
                 @UniqueConstraint(name = "uk_users_username", columnNames = "username"),
-                @UniqueConstraint(name = "uk_users_email",    columnNames = "email")
+                @UniqueConstraint(name = "uk_users_email",    columnNames = "email"),
+                @UniqueConstraint(name = "uk_users_provider", columnNames = {"provider", "provider_id"})
         }
 )
 @Data
@@ -54,10 +55,28 @@ public class User implements UserDetails {
     @Column(nullable = false, length = 20)
     private Role role;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private AuthProvider provider = AuthProvider.LOCAL;
+
+    @Column(name = "provider_id", length = 100)
+    private String providerId;
+
+    @Column(name = "full_name", length = 100)
+    private String fullName;
+
+    @Column(name = "avatar_url", columnDefinition = "TEXT")
+    private String avatarUrl;
+
     /** Whether the account is active; admins can lock/unlock it. */
     @Column(nullable = false, columnDefinition = "boolean default true")
     @Builder.Default
     private boolean enabled = true;
+
+    @Column(name = "email_verified", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean emailVerified = false;
 
     // ── UserDetails contract ──────────────────────────────────────────────────
 

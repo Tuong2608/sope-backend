@@ -8,6 +8,8 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
+
 /**
  * Bridges Spring Security's {@link UserDetailsService} contract with the
  * application's {@link UserRepository}.
@@ -24,8 +26,11 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String usernameOrEmail) throws UsernameNotFoundException {
-        return userRepository.findByUsernameOrEmail(usernameOrEmail, usernameOrEmail)
+        String identifier = usernameOrEmail == null ? "" : usernameOrEmail.trim();
+        String normalizedEmail = identifier.toLowerCase(Locale.ROOT);
+
+        return userRepository.findByUsernameOrEmail(identifier, normalizedEmail)
                 .orElseThrow(() ->
-                        new UsernameNotFoundException("User not found with username or email: " + usernameOrEmail));
+                        new UsernameNotFoundException("User not found with username or email: " + identifier));
     }
 }

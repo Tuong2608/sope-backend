@@ -67,6 +67,7 @@ public class ProductService {
             String keyword,
             String category,
             String brand,
+            String storage,
             Long minPrice,
             Long maxPrice,
             Pageable pageable) {
@@ -83,6 +84,9 @@ public class ProductService {
         }
         if (brand != null && !brand.isBlank()) {
             spec = spec.and(ProductSpecifications.brandContains(brand));
+        }
+        if (storage != null && !storage.isBlank()) {
+            spec = spec.and(ProductSpecifications.storageContains(storage));
         }
         if (minPrice != null) {
             spec = spec.and(ProductSpecifications.priceGreaterThanOrEqual(minPrice));
