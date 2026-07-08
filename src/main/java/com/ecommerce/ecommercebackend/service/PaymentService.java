@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -87,6 +88,44 @@ public class PaymentService {
         payment = paymentRepository.save(payment);
         log.info("[PAYMENT] Tạo giao dịch #{} - Provider: {} - OrderId: {}",
                 payment.getId(), payment.getProvider(), payment.getOrderId());
+        return toResponse(payment);
+    }
+
+    /**
+     * Demo-only confirmation for local VNPAY/MoMo testing.
+     *
+     * <p>The user still creates a normal payment record first. This method then
+     * simulates a bank transfer confirmation, marks the payment as SUCCESS, and
+     * marks the linked order as PAID so admin revenue statistics use persisted
+     * order/payment data.</p>
+     */
+    @Transactional
+    public PaymentResponse simulateBankTransfer(User user, Long id) {
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + id));
+        Order order = orderRepository.findByOrderCodeAndUserId(payment.getOrderId(), user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + id));
+
+        if (payment.getStatus() == PaymentStatus.SUCCESS) {
+            return toResponse(payment);
+        }
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            throw new BadRequestException("Cannot pay a cancelled order.");
+        }
+        if (order.getStatus() == OrderStatus.PAID || order.getStatus() == OrderStatus.COMPLETED) {
+            throw new BadRequestException("Order has already been paid.");
+        }
+        if (payment.getStatus() != PaymentStatus.PENDING) {
+            throw new BadRequestException("Only pending payments can be confirmed.");
+        }
+
+        payment.setStatus(PaymentStatus.SUCCESS);
+        payment.setTransactionId(buildSimulatedTransactionId(payment));
+        payment = paymentRepository.save(payment);
+        markOrderPaidIfSuccessful(payment, PaymentStatus.SUCCESS);
+
+        log.info("[PAYMENT DEMO] Xac nhan chuyen khoan gia lap cho Payment #{} - OrderId: {}",
+                payment.getId(), payment.getOrderId());
         return toResponse(payment);
     }
 
@@ -246,6 +285,14 @@ public class PaymentService {
         return toResponse(payment);
     }
 
+    @Transactional(readOnly = true)
+    public List<PaymentResponse> getAllPayments(PaymentStatus status) {
+        List<Payment> payments = (status == null)
+                ? paymentRepository.findAllByOrderByCreatedAtDesc()
+                : paymentRepository.findByStatusOrderByCreatedAtDesc(status);
+        return payments.stream().map(this::toResponse).toList();
+    }
+
     // ── Mapping ───────────────────────────────────────────────────────────────
 
     private void validatePaymentRequest(Order order, PaymentRequest request) {
@@ -273,6 +320,11 @@ public class PaymentService {
             return "Thanh toan don hang " + order.getOrderCode();
         }
         return request.getOrderInfo().trim();
+    }
+
+    private String buildSimulatedTransactionId(Payment payment) {
+        String compactOrderId = payment.getOrderId().replaceAll("[^A-Za-z0-9]", "");
+        return "SIM-" + compactOrderId + "-" + payment.getId() + "-" + System.currentTimeMillis();
     }
 
     private void markOrderPaidIfSuccessful(Payment payment, PaymentStatus status) {

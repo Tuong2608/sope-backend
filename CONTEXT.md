@@ -334,3 +334,12 @@ Khi kiểm tra API cần ghi:
 - Thay doi: Tao token reset bang SecureRandom, luu SHA-256 hash va thoi han 30 phut tren users; reset mat khau se validate token, ma hoa password moi va xoa token. Them config app.frontend.base-url va app.password-reset.expiration-minutes.
 - Kiem tra: ./mvnw.cmd -q -DskipTests compile pass.
 - Luu y: Can restart backend de ddl-auto=update them cot moi; chua cau hinh SMTP nen response co resetLink de frontend test local.
+
+## 2026-07-08 - Payment demo va lich su thanh toan admin
+- Yeu cau: Gia lap buoc chuyen khoan cho thanh toan VNPAY/MoMo va luu lich su thanh toan de admin thong ke doanh thu.
+- Package lien quan: controller, controller/admin, service, repository, entity payment/order.
+- Da sua: controller/PaymentController.java; controller/admin/AdminPaymentController.java; service/PaymentService.java; repository/PaymentRepository.java.
+- Endpoint: POST /api/payment/create; POST /api/payment/{id}/simulate-bank-transfer; GET /api/admin/payments; GET /api/admin/stats.
+- Thay doi: simulateBankTransfer kiem tra payment thuoc user, chi nhan PENDING, tao transactionId SIM-*, cap nhat Payment SUCCESS va Order PAID; admin co API xem payment history theo status tuy chon.
+- Kiem tra: ./mvnw.cmd -q -DskipTests compile pass.
+- Luu y: GET /api/admin/stats tinh doanh thu tu order PAID/COMPLETED; neu user khong bam simulate thi payment van PENDING va doanh thu chua tang.

@@ -70,6 +70,16 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getById(user, id));
     }
 
+    /**
+     * Xac nhan chuyen khoan gia lap cho payment VNPAY/MoMo trong moi truong demo.
+     */
+    @PostMapping("/{id}/simulate-bank-transfer")
+    public ResponseEntity<PaymentResponse> simulateBankTransfer(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(paymentService.simulateBankTransfer(user, id));
+    }
+
     // ── VNPAY Callback (redirect từ trình duyệt) ─────────────────────────────
 
     /**
