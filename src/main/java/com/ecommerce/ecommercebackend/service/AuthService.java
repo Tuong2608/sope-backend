@@ -1,9 +1,12 @@
 package com.ecommerce.ecommercebackend.service;
 
 import com.ecommerce.ecommercebackend.dto.request.GoogleLoginRequest;
+import com.ecommerce.ecommercebackend.dto.request.ForgotPasswordRequest;
 import com.ecommerce.ecommercebackend.dto.request.LoginRequest;
 import com.ecommerce.ecommercebackend.dto.request.RegisterRequest;
+import com.ecommerce.ecommercebackend.dto.request.ResetPasswordRequest;
 import com.ecommerce.ecommercebackend.dto.response.AuthResponse;
+import com.ecommerce.ecommercebackend.dto.response.PasswordResetResponse;
 import com.ecommerce.ecommercebackend.entity.AuthProvider;
 import com.ecommerce.ecommercebackend.entity.Role;
 import com.ecommerce.ecommercebackend.entity.User;
@@ -25,7 +28,14 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,9 +49,19 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final AuthenticationManager authenticationManager;
     private final GoogleIdTokenVerifier googleIdTokenVerifier;
+    private final SecureRandom secureRandom = new SecureRandom();
+
+    private static final String RESET_MESSAGE =
+            "If the email exists, a password reset link has been created.";
 
     @Value("${app.google.client-id:}")
     private String googleClientId;
+
+    @Value("${app.frontend.base-url:http://localhost:3000}")
+    private String frontendBaseUrl;
+
+    @Value("${app.password-reset.expiration-minutes:30}")
+    private long passwordResetExpirationMinutes;
 
     @Transactional
     public void register(RegisterRequest request) {
@@ -79,6 +99,50 @@ public class AuthService {
 
         User user = (User) authentication.getPrincipal();
         return buildAuthResponse(user);
+    }
+
+    @Transactional
+    public PasswordResetResponse requestPasswordReset(ForgotPasswordRequest request) {
+        String email = normalizeEmail(request.getEmail());
+        Optional<User> user = userRepository.findByEmail(email);
+        if (user.isEmpty()) {
+            return PasswordResetResponse.builder()
+                    .message(RESET_MESSAGE)
+                    .build();
+        }
+
+        String token = generateResetToken();
+        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(passwordResetExpirationMinutes);
+        User account = user.get();
+        account.setPasswordResetTokenHash(hashToken(token));
+        account.setPasswordResetTokenExpiresAt(expiresAt);
+        userRepository.save(account);
+
+        return PasswordResetResponse.builder()
+                .message(RESET_MESSAGE)
+                .resetLink(buildResetLink(token))
+                .expiresAt(expiresAt)
+                .build();
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        if (!request.getPassword().equals(request.getConfirmPassword())) {
+            throw new BadRequestException("Password confirmation does not match.");
+        }
+
+        User user = userRepository.findByPasswordResetTokenHash(hashToken(request.getToken().trim()))
+                .orElseThrow(() -> new BadRequestException("Reset token is invalid or expired."));
+        LocalDateTime expiresAt = user.getPasswordResetTokenExpiresAt();
+        if (expiresAt == null || expiresAt.isBefore(LocalDateTime.now())) {
+            clearPasswordResetToken(user);
+            userRepository.save(user);
+            throw new BadRequestException("Reset token is invalid or expired.");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        clearPasswordResetToken(user);
+        userRepository.save(user);
     }
 
     @Transactional
@@ -204,6 +268,40 @@ public class AuthService {
 
     private String normalizeEmail(String email) {
         return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String generateResetToken() {
+        byte[] bytes = new byte[32];
+        secureRandom.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private String hashToken(String token) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(token.getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder(hash.length * 2);
+            for (byte value : hash) {
+                builder.append(String.format("%02x", value));
+            }
+            return builder.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available.", ex);
+        }
+    }
+
+    private String buildResetLink(String token) {
+        String baseUrl = frontendBaseUrl == null ? "" : frontendBaseUrl.trim();
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+        String encodedToken = URLEncoder.encode(token, StandardCharsets.UTF_8);
+        return baseUrl + "/reset-password?token=" + encodedToken;
+    }
+
+    private void clearPasswordResetToken(User user) {
+        user.setPasswordResetTokenHash(null);
+        user.setPasswordResetTokenExpiresAt(null);
     }
 
     private String generateOAuthPasswordHash() {

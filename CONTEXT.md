@@ -326,3 +326,11 @@ Khi kiểm tra API cần ghi:
 - Thay doi: brandContains tach brand query thanh cac term va match ca brand/name; Apple match iPhone/iPad/MacBook; response product suy luan brand tu name neu brand rong; DataSeeder doc first text trong mang long nhau de lan seed sau khong lam brand rong.
 - Kiem tra: ./mvnw.cmd -q -DskipTests compile pass.
 - Luu y: DB hien co khong can reset; neu reset/seed lai thi brand se duoc import dung hon.
+
+## 2026-07-08 - Forgot password backend
+- Yeu cau: Ho tro quen mat khau/dat lai mat khau cho auth.
+- Da sua: controller/AuthController.java; service/AuthService.java; entity/User.java; repository/UserRepository.java; dto/request/ForgotPasswordRequest.java; dto/request/ResetPasswordRequest.java; dto/response/PasswordResetResponse.java; src/main/resources/application.properties.
+- Endpoint: POST /api/auth/forgot-password; POST /api/auth/reset-password.
+- Thay doi: Tao token reset bang SecureRandom, luu SHA-256 hash va thoi han 30 phut tren users; reset mat khau se validate token, ma hoa password moi va xoa token. Them config app.frontend.base-url va app.password-reset.expiration-minutes.
+- Kiem tra: ./mvnw.cmd -q -DskipTests compile pass.
+- Luu y: Can restart backend de ddl-auto=update them cot moi; chua cau hinh SMTP nen response co resetLink de frontend test local.

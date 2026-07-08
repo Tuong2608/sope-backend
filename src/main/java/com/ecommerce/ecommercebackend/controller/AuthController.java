@@ -1,9 +1,12 @@
 package com.ecommerce.ecommercebackend.controller;
 
 import com.ecommerce.ecommercebackend.dto.request.GoogleLoginRequest;
+import com.ecommerce.ecommercebackend.dto.request.ForgotPasswordRequest;
 import com.ecommerce.ecommercebackend.dto.request.LoginRequest;
 import com.ecommerce.ecommercebackend.dto.request.RegisterRequest;
+import com.ecommerce.ecommercebackend.dto.request.ResetPasswordRequest;
 import com.ecommerce.ecommercebackend.dto.response.AuthResponse;
+import com.ecommerce.ecommercebackend.dto.response.PasswordResetResponse;
 import com.ecommerce.ecommercebackend.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +53,18 @@ public class AuthController {
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<PasswordResetResponse> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
+        return ResponseEntity.ok(authService.requestPasswordReset(request));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<String> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok("Password reset successfully.");
     }
 
     /**
