@@ -37,10 +37,10 @@ public class DataSeeder {
 
                             // 1. Xử lý trường hợp mảng cho brand và category
                             if (objNode.has("brand") && objNode.get("brand").isArray()) {
-                                objNode.put("brand", objNode.get("brand").get(0).asText());
+                                objNode.put("brand", firstTextValue(objNode.get("brand")));
                             }
                             if (objNode.has("category") && objNode.get("category").isArray()) {
-                                objNode.put("category", objNode.get("category").get(0).asText());
+                                objNode.put("category", firstTextValue(objNode.get("category")));
                             }
 
                             // 2. Xử lý format tiền tệ cho current_price
@@ -85,5 +85,26 @@ public class DataSeeder {
                 System.out.println("⚡ Bảng products đã có dữ liệu, bỏ qua bước import.");
             }
         };
+    }
+
+    private static String firstTextValue(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return "";
+        }
+        if (node.isTextual()) {
+            return node.asText();
+        }
+        if (node.isValueNode()) {
+            return node.asText("");
+        }
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                String value = firstTextValue(child);
+                if (!value.isBlank()) {
+                    return value;
+                }
+            }
+        }
+        return "";
     }
 }

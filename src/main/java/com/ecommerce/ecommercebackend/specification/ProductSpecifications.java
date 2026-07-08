@@ -1,8 +1,17 @@
 package com.ecommerce.ecommercebackend.specification;
 
 import com.ecommerce.ecommercebackend.entity.Product;
+import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class ProductSpecifications {
 
@@ -30,10 +39,20 @@ public final class ProductSpecifications {
     public static Specification<Product> brandContains(String brand) {
         return (root, query, cb) -> {
             if (isBlank(brand)) return cb.conjunction();
-            String pattern = "%" + brand.toLowerCase() + "%";
-            return cb.or(
-                    cb.like(cb.lower(root.get("brand")), pattern),
-                    cb.like(cb.lower(root.get("name")), pattern));
+            List<String> terms = brandSearchTerms(brand);
+            if (terms.isEmpty()) return cb.conjunction();
+
+            Expression<String> brandValue = cb.lower(cb.coalesce(root.get("brand"), ""));
+            Expression<String> nameValue = cb.lower(cb.coalesce(root.get("name"), ""));
+            List<Predicate> predicates = new ArrayList<>();
+
+            for (String term : terms) {
+                String pattern = "%" + term + "%";
+                predicates.add(cb.like(brandValue, pattern));
+                predicates.add(cb.like(nameValue, pattern));
+            }
+
+            return cb.or(predicates.toArray(new Predicate[0]));
         };
     }
 
@@ -64,5 +83,40 @@ public final class ProductSpecifications {
 
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static List<String> brandSearchTerms(String brand) {
+        String normalized = brand.toLowerCase().trim();
+        Set<String> terms = new LinkedHashSet<>();
+        addBrandTerm(terms, normalized);
+
+        int openParenIndex = normalized.indexOf('(');
+        if (openParenIndex > 0) {
+            addBrandTerm(terms, normalized.substring(0, openParenIndex));
+        }
+
+        Matcher matcher = Pattern.compile("\\(([^)]+)\\)").matcher(normalized);
+        while (matcher.find()) {
+            addBrandTerm(terms, matcher.group(1));
+        }
+
+        if (normalized.contains("apple")) {
+            addBrandTerm(terms, "iphone");
+            addBrandTerm(terms, "ipad");
+            addBrandTerm(terms, "macbook");
+        }
+
+        return new ArrayList<>(terms);
+    }
+
+    private static void addBrandTerm(Set<String> terms, String value) {
+        String term = value
+                .replace('(', ' ')
+                .replace(')', ' ')
+                .replaceAll("\\s+", " ")
+                .trim();
+        if (term.length() >= 2) {
+            terms.add(term);
+        }
     }
 }

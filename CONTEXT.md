@@ -312,3 +312,17 @@ Khi kiểm tra API cần ghi:
 - [ ] Ghi lại API product.
 - [ ] Ghi lại API phục vụ chatbot nếu có.
 - [ ] Ghi lại lỗi backend nếu phát sinh.
+
+## 2026-07-08 - Product popularity sort by rating
+- Yeu cau: Sap xep do pho bien cua san pham theo rating_stars cao den thap.
+- Da sua: src/main/java/com/ecommerce/ecommercebackend/controller/ProductController.java; src/main/java/com/ecommerce/ecommercebackend/service/ProductService.java.
+- Thay doi: ProductController whitelist ratingStars va chap nhan rating_stars; ProductService phat hien sort ratingStars, lay danh sach da filter, tinh trung binh reviews.ratingStars, sort roi tao PageImpl de giu response phan trang.
+- Kiem tra: ./mvnw.cmd -q -DskipTests compile pass.
+- Luu y: Cach nay phu hop tap du lieu hien tai; neu du lieu rat lon can toi uu bang query aggregate trong repository.
+
+## 2026-07-08 - Fix brand filter fallback
+- Yeu cau: Loc hang iPhone/iPad khong ra san pham do DB hien tai brand rong, trong data goc brand la mang long nhau nhu iPhone (Apple), iPad (Apple).
+- Da sua: src/main/java/com/ecommerce/ecommercebackend/specification/ProductSpecifications.java; src/main/java/com/ecommerce/ecommercebackend/service/ProductService.java; src/main/java/com/ecommerce/ecommercebackend/seeder/DataSeeder.java.
+- Thay doi: brandContains tach brand query thanh cac term va match ca brand/name; Apple match iPhone/iPad/MacBook; response product suy luan brand tu name neu brand rong; DataSeeder doc first text trong mang long nhau de lan seed sau khong lam brand rong.
+- Kiem tra: ./mvnw.cmd -q -DskipTests compile pass.
+- Luu y: DB hien co khong can reset; neu reset/seed lai thi brand se duoc import dung hon.

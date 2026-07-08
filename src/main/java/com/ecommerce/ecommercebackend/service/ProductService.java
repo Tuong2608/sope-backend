@@ -3,6 +3,7 @@ package com.ecommerce.ecommercebackend.service;
 import com.ecommerce.ecommercebackend.dto.request.ProductRequest;
 import com.ecommerce.ecommercebackend.dto.response.PagedResponse;
 import com.ecommerce.ecommercebackend.dto.response.ProductResponse;
+import com.ecommerce.ecommercebackend.entity.CrawledReview;
 import com.ecommerce.ecommercebackend.entity.Product;
 import com.ecommerce.ecommercebackend.exception.ResourceNotFoundException;
 import com.ecommerce.ecommercebackend.repository.ProductRepository;
@@ -10,14 +11,18 @@ import com.ecommerce.ecommercebackend.specification.ProductSpecifications;
 import com.ecommerce.ecommercebackend.util.PriceParser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Application service encapsulating product catalog business logic:
@@ -95,6 +100,10 @@ public class ProductService {
             spec = spec.and(ProductSpecifications.priceLessThanOrEqual(maxPrice));
         }
 
+        if (isRatingStarsSort(pageable)) {
+            return searchSortedByRatingStars(spec, pageable);
+        }
+
         Page<ProductResponse> page = productRepository.findAll(spec, pageable)
                 .map(this::toResponse);
 
@@ -124,6 +133,51 @@ public class ProductService {
         return productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Product not found with id: " + id));
+    }
+
+    private PagedResponse<ProductResponse> searchSortedByRatingStars(
+            Specification<Product> spec,
+            Pageable pageable) {
+        Sort.Direction direction = pageable.getSort().stream()
+                .filter(order -> "ratingStars".equals(order.getProperty()))
+                .map(Sort.Order::getDirection)
+                .findFirst()
+                .orElse(Sort.Direction.DESC);
+
+        Comparator<Product> comparator = Comparator.comparingDouble(this::averageRatingStars);
+        if (direction.isDescending()) {
+            comparator = comparator.reversed();
+        }
+        comparator = comparator.thenComparing(Product::getId, Comparator.nullsLast(Long::compareTo));
+
+        List<ProductResponse> products = productRepository.findAll(spec)
+                .stream()
+                .sorted(comparator)
+                .map(this::toResponse)
+                .toList();
+
+        int start = (int) Math.min(pageable.getOffset(), products.size());
+        int end = Math.min(start + pageable.getPageSize(), products.size());
+        Page<ProductResponse> page = new PageImpl<>(products.subList(start, end), pageable, products.size());
+
+        return PagedResponse.from(page);
+    }
+
+    private boolean isRatingStarsSort(Pageable pageable) {
+        return pageable.getSort().stream()
+                .anyMatch(order -> "ratingStars".equals(order.getProperty()));
+    }
+
+    private double averageRatingStars(Product product) {
+        if (product.getReviews() == null || product.getReviews().isEmpty()) {
+            return 0.0;
+        }
+        return product.getReviews().stream()
+                .map(CrawledReview::getRatingStars)
+                .filter(Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
+                .average()
+                .orElse(0.0);
     }
 
     /** Copies request fields onto the entity, parsing prices and flattening brand. */
@@ -184,7 +238,7 @@ public class ProductService {
                 .sku(product.getSku())
                 .name(product.getName())
                 .category(product.getCategory())
-                .brand(product.getBrand())
+                .brand(resolveBrand(product))
                 .shortDescription(product.getShortDescription())
                 .description(product.getDescription())
                 .price(product.getPrice())
@@ -197,5 +251,38 @@ public class ProductService {
                 .colorVariants(product.getColorVariants())
                 .reviews(product.getReviews())
                 .build();
+    }
+
+    private String resolveBrand(Product product) {
+        if (product.getBrand() != null && !product.getBrand().isBlank()) {
+            return product.getBrand().trim();
+        }
+        return inferBrandFromName(product.getName());
+    }
+
+    private String inferBrandFromName(String name) {
+        if (name == null || name.isBlank()) {
+            return "";
+        }
+
+        String lowerName = name.toLowerCase();
+        if (lowerName.contains("iphone")) return "iPhone (Apple)";
+        if (lowerName.contains("ipad")) return "iPad (Apple)";
+        if (lowerName.contains("macbook")) return "MacBook (Apple)";
+        if (lowerName.contains("samsung")) return "Samsung";
+        if (lowerName.contains("oppo")) return "OPPO";
+        if (lowerName.contains("vivo")) return "Vivo";
+        if (lowerName.contains("xiaomi")) return "Xiaomi";
+        if (lowerName.contains("realme")) return "realme";
+        if (lowerName.contains("honor")) return "HONOR";
+        if (lowerName.contains("motorola")) return "Motorola";
+        if (lowerName.contains("lenovo")) return "Lenovo";
+        if (lowerName.contains("asus")) return "ASUS";
+        if (lowerName.contains("acer")) return "Acer";
+        if (lowerName.contains("msi")) return "MSI";
+        if (lowerName.contains("dell")) return "Dell";
+        if (lowerName.contains("hp ")) return "HP";
+
+        return "";
     }
 }

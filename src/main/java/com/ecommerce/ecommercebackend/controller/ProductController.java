@@ -31,7 +31,7 @@ public class ProductController {
 
     /** Sortable fields, whitelisted to reject arbitrary/invalid property names. */
     private static final Set<String> ALLOWED_SORT_FIELDS =
-            Set.of("id", "sku", "name", "price", "oldPrice", "category", "brand");
+            Set.of("id", "sku", "name", "price", "oldPrice", "category", "brand", "ratingStars");
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -78,7 +78,8 @@ public class ProductController {
             @RequestParam(defaultValue = "id") String sortBy,
             @RequestParam(defaultValue = "asc") String sortDir) {
 
-        String sortField = ALLOWED_SORT_FIELDS.contains(sortBy) ? sortBy : "id";
+        String normalizedSortBy = "rating_stars".equalsIgnoreCase(sortBy) ? "ratingStars" : sortBy;
+        String sortField = ALLOWED_SORT_FIELDS.contains(normalizedSortBy) ? normalizedSortBy : "id";
         Sort.Direction direction = "desc".equalsIgnoreCase(sortDir)
                 ? Sort.Direction.DESC
                 : Sort.Direction.ASC;
