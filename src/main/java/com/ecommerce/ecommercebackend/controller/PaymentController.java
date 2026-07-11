@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -70,6 +71,9 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getById(user, id));
     }
 
+    @Value("${spring.profiles.active:dev}")
+    private String activeProfile;
+
     /**
      * Xac nhan chuyen khoan gia lap cho payment VNPAY/MoMo trong moi truong demo.
      */
@@ -77,6 +81,10 @@ public class PaymentController {
     public ResponseEntity<PaymentResponse> simulateBankTransfer(
             @AuthenticationPrincipal User user,
             @PathVariable Long id) {
+        if ("prod".equalsIgnoreCase(activeProfile)) {
+            throw new com.ecommerce.ecommercebackend.exception.BadRequestException(
+                    "Tính năng giả lập thanh toán đã bị khóa trên môi trường production.");
+        }
         return ResponseEntity.ok(paymentService.simulateBankTransfer(user, id));
     }
 
