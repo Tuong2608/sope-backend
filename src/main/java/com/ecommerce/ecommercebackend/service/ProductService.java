@@ -5,8 +5,10 @@ import com.ecommerce.ecommercebackend.dto.response.PagedResponse;
 import com.ecommerce.ecommercebackend.dto.response.ProductResponse;
 import com.ecommerce.ecommercebackend.entity.CrawledReview;
 import com.ecommerce.ecommercebackend.entity.Product;
+import com.ecommerce.ecommercebackend.entity.ProductStatus;
 import com.ecommerce.ecommercebackend.exception.ResourceNotFoundException;
 import com.ecommerce.ecommercebackend.repository.ProductRepository;
+import com.ecommerce.ecommercebackend.repository.ProductVariantRepository;
 import com.ecommerce.ecommercebackend.specification.ProductSpecifications;
 import com.ecommerce.ecommercebackend.util.PriceParser;
 import lombok.RequiredArgsConstructor;
@@ -35,7 +37,9 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class ProductService {
 
-    private final ProductRepository productRepository;
+    private final ProductRepository        productRepository;
+    private final ProductVariantRepository variantRepository;
+    private final ProductVariantService    variantService;
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -50,7 +54,12 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public ProductResponse getById(Long id) {
-        return toResponse(findOrThrow(id));
+        Product p = findOrThrow(id);
+        // B03: Ẩn sản phẩm INACTIVE khi truy cập public
+        if (p.getStatus() == ProductStatus.INACTIVE) {
+            throw new ResourceNotFoundException("Product not found with id: " + id);
+        }
+        return toResponse(p);
     }
     // ── Read (List by IDs for Recommendation) ──────────────────────────────────
 
@@ -233,6 +242,10 @@ public class ProductService {
     }
 
     private ProductResponse toResponse(Product product) {
+        // B03: Lấy danh sách variants đang active
+        var variants = variantRepository.findByProductIdAndActiveTrue(product.getId())
+                .stream().map(variantService::toResponse).toList();
+
         return ProductResponse.builder()
                 .id(product.getId())
                 .sku(product.getSku())
@@ -244,12 +257,19 @@ public class ProductService {
                 .price(product.getPrice())
                 .oldPrice(product.getOldPrice())
                 .url(product.getUrl())
-                .mainThumbnail(product.getMainThumbnail()) // Đã cập nhật
+                .mainThumbnail(product.getMainThumbnail())
                 .images(product.getImages())
                 .specs(product.getSpecs())
                 .storageVariants(product.getStorageVariants())
                 .colorVariants(product.getColorVariants())
                 .reviews(product.getReviews())
+                // B03: Inventory fields
+                .status(product.getStatus())
+                .availableQuantity(product.getAvailableQuantity())
+                .inStock(product.isInStock())
+                .lowStock(product.isLowStock())
+                // B02/B03: Typed variants
+                .variants(variants)
                 .build();
     }
 
