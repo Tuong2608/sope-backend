@@ -5,7 +5,9 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.UpdateTimestamp;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -135,4 +137,64 @@ public class Product {
     @Builder.Default
     @JsonProperty("customer_reviews")
     private List<CrawledReview> reviews = new ArrayList<>();
+
+    // ── B01: Inventory fields ─────────────────────────────────────────────────
+
+    /**
+     * Số lượng sản phẩm còn trong kho (chưa tính hàng đang giữ).
+     * Công thức thực tế: available = stockQuantity - reservedQuantity
+     */
+    @Column(name = "stock_quantity", nullable = false)
+    @Builder.Default
+    private Integer stockQuantity = 0;
+
+    /**
+     * Số lượng đang được giữ tạm thời trong quá trình checkout.
+     * Được cộng lên khi bắt đầu đặt hàng, trừ đi khi thanh toán thành công
+     * hoặc khi reservation hết hạn.
+     */
+    @Column(name = "reserved_quantity", nullable = false)
+    @Builder.Default
+    private Integer reservedQuantity = 0;
+
+    /**
+     * Mức tồn kho tối thiểu — dùng để cảnh báo hàng sắp hết trên dashboard.
+     * Khi stockQuantity <= minStockLevel thì hiển thị cảnh báo.
+     */
+    @Column(name = "min_stock_level", nullable = false)
+    @Builder.Default
+    private Integer minStockLevel = 5;
+
+    /**
+     * Trạng thái kinh doanh: ACTIVE (đang bán), INACTIVE (ngừng bán),
+     * OUT_OF_STOCK (hết hàng tạm thời).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    @Builder.Default
+    private ProductStatus status = ProductStatus.ACTIVE;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
+    // ── Computed helper ───────────────────────────────────────────────────────
+
+    /**
+     * Số lượng thực sự có thể bán = stockQuantity - reservedQuantity.
+     * Không âm — trả về 0 nếu reserved vượt stock.
+     */
+    public int getAvailableQuantity() {
+        return Math.max(0, stockQuantity - reservedQuantity);
+    }
+
+    /** Trả về {@code true} nếu còn ít nhất 1 sản phẩm có thể bán. */
+    public boolean isInStock() {
+        return getAvailableQuantity() > 0;
+    }
+
+    /** Trả về {@code true} nếu số lượng còn lại <= mức tối thiểu. */
+    public boolean isLowStock() {
+        return getAvailableQuantity() <= minStockLevel;
+    }
 }
