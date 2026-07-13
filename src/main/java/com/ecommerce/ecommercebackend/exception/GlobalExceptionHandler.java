@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * Centralised exception handler that converts exceptions into clean JSON
  * error responses, preventing stack traces from leaking to clients.
@@ -19,6 +21,7 @@ import java.util.stream.Collectors;
  * <p>Follows the Open/Closed Principle – new exception types are handled by
  * adding methods rather than modifying existing ones.</p>
  */
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -93,8 +96,9 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
+        log.error("Unhandled exception: ", ex);
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error",
-                ex.getMessage());
+                "An unexpected error occurred. Please try again later.");
     }
 
     // ── Helper ────────────────────────────────────────────────────────────────
