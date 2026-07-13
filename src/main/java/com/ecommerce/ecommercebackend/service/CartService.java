@@ -7,10 +7,13 @@ import com.ecommerce.ecommercebackend.dto.response.CartResponse;
 import com.ecommerce.ecommercebackend.entity.Cart;
 import com.ecommerce.ecommercebackend.entity.CartItem;
 import com.ecommerce.ecommercebackend.entity.Product;
+import com.ecommerce.ecommercebackend.entity.ProductVariant;
 import com.ecommerce.ecommercebackend.entity.User;
+import com.ecommerce.ecommercebackend.exception.BadRequestException;
 import com.ecommerce.ecommercebackend.exception.ResourceNotFoundException;
 import com.ecommerce.ecommercebackend.repository.CartRepository;
 import com.ecommerce.ecommercebackend.repository.ProductRepository;
+import com.ecommerce.ecommercebackend.repository.ProductVariantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,8 +30,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CartService {
 
-    private final CartRepository cartRepository;
-    private final ProductRepository productRepository;
+    private final CartRepository            cartRepository;
+    private final ProductRepository         productRepository;
+    private final ProductVariantRepository  variantRepository;
 
     // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -40,8 +44,9 @@ public class CartService {
     // ── Mutations ─────────────────────────────────────────────────────────────────
 
     /**
-     * Adds a product to the cart. If it is already present, the quantities are
-     * merged rather than duplicating the line.
+     * Adds a product (with optional variant) to the cart.
+     * B05: Phân biệt cùng SP nhưng khác variant (màu/dung lượng).
+     * Không cho chọn quá số lượng tồn kho.
      */
     @Transactional
     public CartResponse addItem(User user, AddToCartRequest request) {
@@ -50,16 +55,44 @@ public class CartService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Product not found with id: " + request.getProductId()));
 
+        // B05: Tìm variant nếu có variantId
+        ProductVariant variant = null;
+        if (request.getVariantId() != null) {
+            variant = variantRepository.findById(request.getVariantId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Variant not found: " + request.getVariantId()));
+        }
+
+        // B05: Kiểm tra tồn kho trước khi thêm
+        int available = (variant != null)
+                ? variant.getAvailableQuantity()
+                : product.getAvailableQuantity();
+        if (request.getQuantity() > available) {
+            throw new BadRequestException(
+                    "Chỉ còn " + available + " sản phẩm trong kho");
+        }
+
+        // B05: Tìm item trùng (cùng product VÀ cùng variant)
+        final Long variantId = variant != null ? variant.getId() : null;
         CartItem existing = cart.getItems().stream()
-                .filter(item -> item.getProduct().getId().equals(product.getId()))
+                .filter(item -> item.getProduct().getId().equals(product.getId())
+                        && java.util.Objects.equals(
+                                item.getVariant() != null ? item.getVariant().getId() : null,
+                                variantId))
                 .findFirst()
                 .orElse(null);
 
         if (existing != null) {
-            existing.setQuantity(existing.getQuantity() + request.getQuantity());
+            int newQty = existing.getQuantity() + request.getQuantity();
+            if (newQty > available) {
+                throw new BadRequestException("Không thể thêm: vượt quá số lượng còn trong kho ("+available+")");
+            }
+            existing.setQuantity(newQty);
         } else {
+            ProductVariant finalVariant = variant;
             cart.addItem(CartItem.builder()
                     .product(product)
+                    .variant(finalVariant)
                     .quantity(request.getQuantity())
                     .build());
         }
@@ -135,14 +168,20 @@ public class CartService {
 
     private CartItemResponse toItemResponse(CartItem item) {
         Product product = item.getProduct();
-        Long price = product.getPrice();
+        ProductVariant variant = item.getVariant();
+
+        // B05: Dùng giá variant nếu có, fallback về giá product
+        Long price = (variant != null && variant.getPrice() != null)
+                ? variant.getPrice()
+                : product.getPrice();
         Long lineTotal = (price == null) ? null : price * item.getQuantity();
 
         return CartItemResponse.builder()
                 .id(item.getId())
                 .productId(product.getId())
                 .name(product.getName())
-                .imgUrl(product.getImgUrl())
+                .imgUrl(variant != null && variant.getImageUrl() != null
+                        ? variant.getImageUrl() : product.getImgUrl())
                 .price(price)
                 .quantity(item.getQuantity())
                 .lineTotal(lineTotal)

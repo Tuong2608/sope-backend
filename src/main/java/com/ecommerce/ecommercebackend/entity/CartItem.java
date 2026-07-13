@@ -17,8 +17,8 @@ import lombok.Setter;
 @Table(
         name = "cart_items",
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_cart_items_cart_product",
-                columnNames = {"cart_id", "product_id"})
+                name = "uk_cart_items_cart_product_variant",
+                columnNames = {"cart_id", "product_id", "variant_id"})
 )
 @Getter
 @Setter
@@ -38,6 +38,14 @@ public class CartItem {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
+
+    /**
+     * B05 – Phiên bản được chọn (màu + dung lượng).
+     * {@code null} nếu sản phẩm không có variant.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "variant_id")
+    private com.ecommerce.ecommercebackend.entity.ProductVariant variant;
 
     @Column(nullable = false)
     private int quantity;
