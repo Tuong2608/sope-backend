@@ -10,9 +10,12 @@ import com.ecommerce.ecommercebackend.dto.response.PasswordResetResponse;
 import com.ecommerce.ecommercebackend.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletResponse;
 
 import java.util.Map;
 
@@ -50,8 +53,9 @@ public class AuthController {
      * @return 200 OK with {@link AuthResponse} containing the access token
      */
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletResponse httpResponse) {
         AuthResponse response = authService.login(request);
+        setTokenCookie(httpResponse, response.getAccessToken());
         return ResponseEntity.ok(response);
     }
 
@@ -74,13 +78,36 @@ public class AuthController {
      * @return 200 OK with an application JWT
      */
     @PostMapping("/google")
-    public ResponseEntity<AuthResponse> googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
+    public ResponseEntity<AuthResponse> googleLogin(@Valid @RequestBody GoogleLoginRequest request, HttpServletResponse httpResponse) {
         AuthResponse response = authService.loginWithGoogle(request);
+        setTokenCookie(httpResponse, response.getAccessToken());
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<String> logout(HttpServletResponse httpResponse) {
+        ResponseCookie cookie = ResponseCookie.from("accessToken", "")
+                .httpOnly(true)
+                .secure(false) // in production this should be true for HTTPS
+                .path("/")
+                .maxAge(0) // delete cookie
+                .build();
+        httpResponse.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+        return ResponseEntity.ok("Logged out successfully");
     }
 
     @GetMapping("/google/client-id")
     public ResponseEntity<Map<String, String>> googleClientId() {
         return ResponseEntity.ok(Map.of("clientId", authService.getGoogleClientId()));
+    }
+
+    private void setTokenCookie(HttpServletResponse response, String token) {
+        ResponseCookie cookie = ResponseCookie.from("accessToken", token)
+                .httpOnly(true)
+                .secure(false) // should be configured depending on env, false for local
+                .path("/")
+                .maxAge(7 * 24 * 60 * 60)
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }
 }
