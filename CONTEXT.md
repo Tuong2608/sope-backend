@@ -343,3 +343,23 @@ Khi kiểm tra API cần ghi:
 - Thay doi: simulateBankTransfer kiem tra payment thuoc user, chi nhan PENDING, tao transactionId SIM-*, cap nhat Payment SUCCESS va Order PAID; admin co API xem payment history theo status tuy chon.
 - Kiem tra: ./mvnw.cmd -q -DskipTests compile pass.
 - Luu y: GET /api/admin/stats tinh doanh thu tu order PAID/COMPLETED; neu user khong bam simulate thi payment van PENDING va doanh thu chua tang.
+
+## 2026-07-12 - C01: So dia chi giao hang (Address book)
+- Yeu cau: Chuan hoa dia chi nhan hang - luu nguoi nhan, SDT, tinh/huyen/xa, dia chi chi tiet; validate truong bat buoc.
+- Package lien quan: entity, repository, dto/request, dto/response, service, controller.
+- Da tao: entity/Address.java; repository/AddressRepository.java; dto/request/AddressRequest.java; dto/response/AddressResponse.java; service/AddressService.java; controller/AddressController.java.
+- Endpoint: GET/POST /api/addresses; GET/PUT/DELETE /api/addresses/{id}; PUT /api/addresses/{id}/default. Tat ca yeu cau dang nhap (da duoc phu boi anyRequest().authenticated() co san, khong sua SecurityConfig).
+- Thay doi: Address la so dia chi rieng cua User (1-n), moi field bat buoc (@NotBlank + regex SDT VN). Dia chi dau tien tu dong thanh default; AddressService dam bao chi 1 default/user; xoa default se promote dia chi con lai gan nhat.
+- Kiem tra: ./mvnw.cmd -DskipTests compile pass; ./mvnw.cmd test (CartServiceTest, OrderServiceTest, PaymentServiceTest) 7/7 pass, khong bi anh huong.
+- Luu y: Order.shippingAddress hien van la 1 string rieng (chua doi) - C06 (ngay 14) se noi Address vao luc tao don.
+- Viec can lam tiep theo: C02-C05 (giao hang/ETA), C06 se dung Address entity nay de snapshot vao Order.
+
+## 2026-07-12 - D01+D02: Chot quy tac va tao bang ma giam gia (Coupon)
+- Yeu cau: Chot quy tac coupon (1 don 1 ma, giam % hoac so tien, ap dung SP/loai/toan don) va tao bang coupon + lich su giu/dung/tra luot.
+- Package lien quan: entity, repository.
+- Da tao: entity/DiscountType.java; entity/CouponScope.java; entity/CouponUsageStatus.java; entity/Coupon.java; entity/CouponUsage.java; repository/CouponRepository.java; repository/CouponUsageRepository.java.
+- Endpoint: Chua co (D03 - API quan ly coupon - se lam ngay 13/07).
+- Thay doi: Coupon luu code/discountType/discountValue/scope/applicableProductIds/applicableCategories/minOrderAmount/maxDiscountAmount/usageLimit/usageLimitPerUser/usedCount/startAt/endAt/active, kem helper isWithinValidPeriod()/hasReachedUsageLimit(). CouponUsage ghi 1 dong HELD/USED/RELEASED cho moi (coupon, order), unique(coupon_id, order_id) de enforce "1 don 1 ma" o DB.
+- Kiem tra: ./mvnw.cmd -DskipTests compile pass (135 file). Chua co Controller/Service nghiep vu - chi entity + repository dung ddl-auto=update de tao bang.
+- Luu y: discountValue dung BigDecimal (ap dung ca % lan VND tuy discountType); applicableProductIds/applicableCategories la @ElementCollection rieng, category la String giong Product.category (chua co entity Category rieng).
+- Viec can lam tiep theo: D03 (API quan ly coupon cho Admin), D04 (ham tinh tien don), D05 (API thu/ap ma), D06 (giu/tra luot voi concurrency).
