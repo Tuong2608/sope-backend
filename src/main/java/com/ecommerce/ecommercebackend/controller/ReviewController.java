@@ -33,7 +33,7 @@ public class ReviewController {
 
     @PostMapping("/api/reviews")
     public ResponseEntity<ReviewResponse> create(
-            @AuthenticationPrincipal User user,
+            @AuthenticationPrincipal User user, // Dùng context để tránh người lạ ghi rating hộ tài khoản khác
             @Valid @RequestBody ReviewRequest request) {
         return ResponseEntity.ok(reviewService.createOrUpdate(user, request));
     }
