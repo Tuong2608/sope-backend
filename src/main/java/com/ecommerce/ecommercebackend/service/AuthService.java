@@ -7,6 +7,7 @@ import com.ecommerce.ecommercebackend.dto.request.RegisterRequest;
 import com.ecommerce.ecommercebackend.dto.request.ResetPasswordRequest;
 import com.ecommerce.ecommercebackend.dto.response.AuthResponse;
 import com.ecommerce.ecommercebackend.dto.response.PasswordResetResponse;
+import lombok.extern.slf4j.Slf4j;
 import com.ecommerce.ecommercebackend.entity.AuthProvider;
 import com.ecommerce.ecommercebackend.entity.Role;
 import com.ecommerce.ecommercebackend.entity.User;
@@ -40,6 +41,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -118,10 +120,11 @@ public class AuthService {
         account.setPasswordResetTokenExpiresAt(expiresAt);
         userRepository.save(account);
 
+        String resetLink = buildResetLink(token);
+        log.info("Simulating email send... Reset link for {}: {}", email, resetLink);
+
         return PasswordResetResponse.builder()
                 .message(RESET_MESSAGE)
-                .resetLink(buildResetLink(token))
-                .expiresAt(expiresAt)
                 .build();
     }
 
