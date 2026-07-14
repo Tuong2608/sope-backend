@@ -98,6 +98,7 @@ class CartServiceTest {
                 .id(id)
                 .name(name)
                 .price(price)
+                .stockQuantity(100)
                 .imgUrl("https://example.com/product.png")
                 .build();
     }
