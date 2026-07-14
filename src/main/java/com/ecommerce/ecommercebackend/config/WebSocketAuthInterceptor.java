@@ -54,6 +54,30 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             } else {
                 log.warn("[WS] CONNECT bị từ chối: token không hợp lệ hoặc thiếu token");
             }
+        } else if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
+            String destination = accessor.getDestination();
+            if (destination != null && destination.startsWith("/topic/chat.")) {
+                java.security.Principal principal = accessor.getUser();
+                if (principal == null) {
+                    throw new IllegalArgumentException("Từ chối SUBSCRIBE: Chưa xác thực (No Principal)");
+                }
+                
+                org.springframework.security.authentication.UsernamePasswordAuthenticationToken auth =
+                        (org.springframework.security.authentication.UsernamePasswordAuthenticationToken) principal;
+                Object authPrincipal = auth.getPrincipal();
+                
+                if (authPrincipal instanceof com.ecommerce.ecommercebackend.entity.User user) {
+                    if (user.getRole() != com.ecommerce.ecommercebackend.entity.Role.ROLE_ADMIN) {
+                        String userIdStr = String.valueOf(user.getId());
+                        if (!destination.contains("_" + userIdStr + "_") && !destination.endsWith("_" + userIdStr)) {
+                            log.warn("[WS] Từ chối SUBSCRIBE: User {} không có quyền truy cập {}", user.getUsername(), destination);
+                            throw new IllegalArgumentException("Từ chối SUBSCRIBE: Bạn không có quyền truy cập phòng này");
+                        }
+                    }
+                } else {
+                    throw new IllegalArgumentException("Từ chối SUBSCRIBE: Principal không hợp lệ");
+                }
+            }
         }
         return message;
     }
