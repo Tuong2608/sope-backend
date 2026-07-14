@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import jakarta.servlet.http.Cookie;
 import java.io.IOException;
 
 /**
@@ -80,6 +81,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String header = request.getHeader(AUTHORIZATION_HEADER);
         if (StringUtils.hasText(header) && header.startsWith(BEARER_PREFIX)) {
             return header.substring(BEARER_PREFIX.length());
+        }
+
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                if ("accessToken".equals(cookie.getName())) {
+                    return cookie.getValue();
+                }
+            }
         }
         return null;
     }

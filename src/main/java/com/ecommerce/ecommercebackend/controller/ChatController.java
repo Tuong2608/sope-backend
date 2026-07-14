@@ -8,6 +8,12 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.ecommerce.ecommercebackend.entity.User;
+import com.ecommerce.ecommercebackend.entity.Role;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 
@@ -29,24 +35,42 @@ public class ChatController {
 
     private final ChatService chatService;
 
+    @Value("${app.chatbot.secret:}")
+    private String chatbotSecret;
+
     /**
      * Receives one conversation turn from the chatbot and stores it.
      * Returns 200 OK — the FastAPI side checks the status code.
      */
     @PostMapping("/save")
-    public ResponseEntity<SaveChatResponse> save(@Valid @RequestBody SaveChatRequest request) {
+    public ResponseEntity<SaveChatResponse> save(
+            @Valid @RequestBody SaveChatRequest request,
+            @RequestHeader(value = "X-Chatbot-Secret", required = false) String secret) {
+        if (StringUtils.hasText(chatbotSecret) && !chatbotSecret.equals(secret)) {
+            throw new AccessDeniedException("Invalid chatbot secret");
+        }
         return ResponseEntity.ok(chatService.saveTurn(request));
     }
 
     /** Lists all chat sessions for the seller dashboard (no message bodies). */
     @GetMapping("/sessions")
-    public ResponseEntity<List<ChatSessionResponse>> listSessions() {
+    public ResponseEntity<List<ChatSessionResponse>> listSessions(@AuthenticationPrincipal User user) {
+        if (user.getRole() != Role.ROLE_ADMIN) {
+            throw new AccessDeniedException("Only admins can list all chat sessions");
+        }
         return ResponseEntity.ok(chatService.listSessions());
     }
 
     /** Returns a chatter's full conversation history (the context package). */
     @GetMapping("/sessions/{userId}")
-    public ResponseEntity<ChatSessionResponse> getHistory(@PathVariable String userId) {
+    public ResponseEntity<ChatSessionResponse> getHistory(
+            @PathVariable String userId,
+            @AuthenticationPrincipal User user) {
+        if (user.getRole() != Role.ROLE_ADMIN 
+            && !userId.equals(user.getUsername()) 
+            && !userId.equals(String.valueOf(user.getId()))) {
+            throw new AccessDeniedException("Cannot view chat session of another user");
+        }
         return ResponseEntity.ok(chatService.getHistory(userId));
     }
 }

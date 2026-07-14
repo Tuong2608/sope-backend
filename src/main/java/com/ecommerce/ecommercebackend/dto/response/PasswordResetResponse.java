@@ -10,6 +10,4 @@ import java.time.LocalDateTime;
 public class PasswordResetResponse {
 
     private String message;
-    private String resetLink;
-    private LocalDateTime expiresAt;
 }
