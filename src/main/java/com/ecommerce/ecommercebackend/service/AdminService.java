@@ -38,16 +38,35 @@ public class AdminService {
     }
 
     @Transactional
-    public UserResponse changeRole(Long userId, Role role) {
+    public UserResponse changeRole(User currentUser, Long userId, Role role) {
         User user = findUserOrThrow(userId);
+
+        if (currentUser.getId().equals(userId) && role != Role.ROLE_ADMIN) {
+            throw new com.ecommerce.ecommercebackend.exception.BadRequestException("Bạn không thể tự hạ quyền của chính mình.");
+        }
+
+        if (user.getRole() == Role.ROLE_ADMIN && role != Role.ROLE_ADMIN) {
+            long adminCount = userRepository.findAll().stream()
+                    .filter(u -> u.getRole() == Role.ROLE_ADMIN)
+                    .count();
+            if (adminCount <= 1) {
+                throw new com.ecommerce.ecommercebackend.exception.BadRequestException("Không thể hạ quyền Admin duy nhất còn lại của hệ thống.");
+            }
+        }
+
         user.setRole(role);
         return toUserResponse(userRepository.save(user));
     }
 
     /** Locks ({@code enabled=false}) or unlocks a user account. */
     @Transactional
-    public UserResponse setEnabled(Long userId, boolean enabled) {
+    public UserResponse setEnabled(User currentUser, Long userId, boolean enabled) {
         User user = findUserOrThrow(userId);
+        
+        if (!enabled && currentUser.getId().equals(userId)) {
+            throw new com.ecommerce.ecommercebackend.exception.BadRequestException("Bạn không thể tự khóa tài khoản của chính mình.");
+        }
+
         user.setEnabled(enabled);
         return toUserResponse(userRepository.save(user));
     }
