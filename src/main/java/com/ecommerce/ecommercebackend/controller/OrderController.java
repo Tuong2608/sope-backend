@@ -27,13 +27,30 @@ public class OrderController {
 
     private final OrderService orderService;
 
+    private final java.util.concurrent.ConcurrentHashMap<String, OrderResponse> idempotencyCache = new java.util.concurrent.ConcurrentHashMap<>();
+
     /** Places an order from the current user's cart. */
     @PostMapping
     public ResponseEntity<OrderResponse> create(
             @AuthenticationPrincipal User user,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody CreateOrderRequest request) {
-        OrderResponse created = orderService.createOrder(user, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+
+        if (idempotencyKey == null) {
+            OrderResponse created = orderService.createOrder(user, request);
+            return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        }
+
+        try {
+            OrderResponse created = idempotencyCache.computeIfAbsent(idempotencyKey, key ->
+                    orderService.createOrder(user, request)
+            );
+            return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        } catch (RuntimeException ex) {
+            // computeIfAbsent wraps RuntimeException, we should just throw it so global handler catches it (e.g. BadRequestException)
+            idempotencyCache.remove(idempotencyKey);
+            throw ex;
+        }
     }
 
     /** Returns the current user's order history (newest first). */
