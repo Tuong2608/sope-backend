@@ -51,4 +51,9 @@ public class OrderItem {
     /** {@code unitPrice * quantity}. */
     @Column(name = "line_total", nullable = false)
     private Long lineTotal;
+
+    /** Portion of the order's coupon discount allocated to this line (task D04). */
+    @Column(name = "discount_amount", nullable = false)
+    @Builder.Default
+    private Long discountAmount = 0L;
 }
