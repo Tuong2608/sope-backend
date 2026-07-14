@@ -33,6 +33,10 @@ public class OrderItem {
     @Column(name = "product_id")
     private Long productId;
 
+    /** B08: Soft reference tới variant (null nếu sản phẩm không có variant). */
+    @Column(name = "variant_id")
+    private Long variantId;
+
     /** Product name at purchase time. */
     @Column(name = "product_name", nullable = false, length = 255)
     private String productName;

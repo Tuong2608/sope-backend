@@ -33,8 +33,9 @@ public class OrderService {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final OrderRepository orderRepository;
-    private final CartService cartService;
-    private final CartRepository cartRepository;
+    private final CartService     cartService;
+    private final CartRepository  cartRepository;
+    private final InventoryService inventoryService; // B08/B09
 
     // ── Create ──────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ public class OrderService {
 
             order.addItem(OrderItem.builder()
                     .productId(product.getId())
+                    .variantId(cartItem.getVariant() != null ? cartItem.getVariant().getId() : null)
                     .productName(product.getName())
                     .unitPrice(unitPrice)
                     .quantity(cartItem.getQuantity())
@@ -125,7 +127,10 @@ public class OrderService {
                     "Chỉ có thể huỷ đơn hàng đang ở trạng thái PENDING.");
         }
         order.setStatus(OrderStatus.CANCELLED);
-        return toResponse(orderRepository.save(order));
+        Order saved = orderRepository.save(order);
+        // B09: Hoàn trả tồn kho khi hủy đơn
+        inventoryService.restoreStockForOrder(saved);
+        return toResponse(saved);
     }
 
     /**
@@ -141,7 +146,9 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Order not found with code: " + orderCode));
         order.setStatus(OrderStatus.PAID);
-        orderRepository.save(order);
+        Order saved = orderRepository.save(order);
+        // B08: Giảm tồn kho khi đơn hàng được thanh toán thành công
+        inventoryService.deductStockForOrder(saved);
     }
 
     // ── Admin operations ──────────────────────────────────────────────────────────

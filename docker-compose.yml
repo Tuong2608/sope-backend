@@ -7,8 +7,10 @@ services:
     container_name: ecommerce-mysql-db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: 12345
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ecommerce_db
+    env_file:
+      - .env
     ports:
       - "3306:3306"          # Mở cổng 3306 để bạn có thể kết nối từ máy ngoài qua DBeaver/Navicat
     volumes:
@@ -16,7 +18,7 @@ services:
     networks:
       - ecommerce-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p12345"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -38,7 +40,9 @@ services:
       # Chú ý: url thay đổi từ "localhost" thành tên service "db" của container MySQL
       - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/ecommerce_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=12345
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+    env_file:
+      - .env
     networks:
       - ecommerce-network
 

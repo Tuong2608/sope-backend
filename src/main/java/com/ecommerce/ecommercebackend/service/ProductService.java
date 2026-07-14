@@ -11,6 +11,7 @@ import com.ecommerce.ecommercebackend.repository.ProductRepository;
 import com.ecommerce.ecommercebackend.repository.ProductVariantRepository;
 import com.ecommerce.ecommercebackend.specification.ProductSpecifications;
 import com.ecommerce.ecommercebackend.util.PriceParser;
+import com.ecommerce.ecommercebackend.util.ProductImageUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -40,6 +41,7 @@ public class ProductService {
     private final ProductRepository        productRepository;
     private final ProductVariantRepository variantRepository;
     private final ProductVariantService    variantService;
+    private final ProductImageUtil         imageUtil; // B10
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -246,6 +248,10 @@ public class ProductService {
         var variants = variantRepository.findByProductIdAndActiveTrue(product.getId())
                 .stream().map(variantService::toResponse).toList();
 
+        // B10: Chuẩn hóa ảnh
+        String resolvedImg = imageUtil.resolveImageUrl(product.getImgUrl(), product.getCategory());
+        var normalizedImages = imageUtil.normalizeImages(product.getImages(), resolvedImg);
+
         return ProductResponse.builder()
                 .id(product.getId())
                 .sku(product.getSku())
@@ -258,7 +264,8 @@ public class ProductService {
                 .oldPrice(product.getOldPrice())
                 .url(product.getUrl())
                 .mainThumbnail(product.getMainThumbnail())
-                .images(product.getImages())
+                .imgUrl(resolvedImg)
+                .images(normalizedImages)
                 .specs(product.getSpecs())
                 .storageVariants(product.getStorageVariants())
                 .colorVariants(product.getColorVariants())
