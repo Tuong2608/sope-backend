@@ -5,6 +5,7 @@ import com.ecommerce.ecommercebackend.entity.PaymentMethod;
 import lombok.Builder;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -23,10 +24,17 @@ public class OrderResponse {
     private OrderStatus status;
     private PaymentMethod paymentMethod;
     private Long totalAmount;
+    private Long subtotalAmount;
+    private Long discountAmount;
+    private String couponCode;
 
     private String recipientName;
     private String phone;
     private String shippingAddress;
+    private String shippingMethodCode;
+    private Long shippingFee;
+    private LocalDate estimatedDeliveryMinDate;
+    private LocalDate estimatedDeliveryMaxDate;
     private String note;
 
     private List<OrderItemResponse> items;

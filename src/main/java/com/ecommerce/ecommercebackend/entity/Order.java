@@ -9,6 +9,7 @@ import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -64,11 +65,25 @@ public class Order {
     @Column(name = "payment_method", nullable = false, length = 20)
     private PaymentMethod paymentMethod;
 
-    /** Order grand total in VND (sum of line totals). */
+    /** Order grand total in VND: {@code subtotalAmount - discountAmount + shippingFee}. */
     @Column(name = "total_amount", nullable = false)
     private Long totalAmount;
 
-    // ── Shipping details ────────────────────────────────────────────────────────
+    /** Sum of line totals before any discount or shipping fee (task D04). */
+    @Column(name = "subtotal_amount", nullable = false)
+    @Builder.Default
+    private Long subtotalAmount = 0L;
+
+    /** Total coupon discount applied to this order (task D04). */
+    @Column(name = "discount_amount", nullable = false)
+    @Builder.Default
+    private Long discountAmount = 0L;
+
+    /** Coupon code applied at checkout, if any (snapshot — coupon rules may change later). */
+    @Column(name = "coupon_code", length = 50)
+    private String couponCode;
+
+    // ── Shipping details (task C06 — snapshot so later catalog/rate changes never alter history) ──
 
     @Column(name = "recipient_name", nullable = false, length = 100)
     private String recipientName;
@@ -78,6 +93,20 @@ public class Order {
 
     @Column(name = "shipping_address", nullable = false, length = 255)
     private String shippingAddress;
+
+    /** Shipping method code used, e.g. "STANDARD"/"EXPRESS" (task C06). */
+    @Column(name = "shipping_method_code", length = 30)
+    private String shippingMethodCode;
+
+    /** Shipping fee in VND, frozen at order time (task C06). */
+    @Column(name = "shipping_fee")
+    private Long shippingFee;
+
+    @Column(name = "estimated_delivery_min_date")
+    private LocalDate estimatedDeliveryMinDate;
+
+    @Column(name = "estimated_delivery_max_date")
+    private LocalDate estimatedDeliveryMaxDate;
 
     @Column(length = 500)
     private String note;

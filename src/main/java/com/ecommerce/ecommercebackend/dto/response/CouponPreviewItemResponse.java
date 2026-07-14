@@ -4,17 +4,16 @@ import lombok.Builder;
 import lombok.Data;
 
 /**
- * A snapshot line within an {@link OrderResponse}.
+ * One cart line's pricing breakdown in a coupon preview (task D05).
  */
 @Data
 @Builder
-public class OrderItemResponse {
+public class CouponPreviewItemResponse {
 
     private Long productId;
     private String productName;
-    private Long unitPrice;
     private int quantity;
+    private Long unitPrice;
     private Long lineTotal;
-    /** Portion of the order's coupon discount allocated to this line (task D04). */
     private Long discountAmount;
 }

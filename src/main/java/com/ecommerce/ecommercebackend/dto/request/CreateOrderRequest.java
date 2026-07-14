@@ -23,6 +23,16 @@ public class CreateOrderRequest {
     @NotBlank(message = "shippingAddress is required")
     private String shippingAddress;
 
+    /** Province/city name — used to compute shipping fee and ETA (task C06). */
+    @NotBlank(message = "province is required")
+    private String province;
+
+    /** Shipping method code, e.g. "STANDARD" or "EXPRESS"; defaults to STANDARD. */
+    private String shippingMethodCode = "STANDARD";
+
+    /** Optional coupon code to apply at checkout (task D04). */
+    private String couponCode;
+
     private String note;
 
     @NotNull(message = "paymentMethod is required (COD, VNPAY or MOMO)")
