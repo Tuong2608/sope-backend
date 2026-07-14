@@ -74,6 +74,8 @@ public class SecurityConfig {
                                          "/api/payment/momo/callback",  "/api/payment/momo/ipn").permitAll()
                         // Chatbot (FastAPI) pushes messages server-to-server without a JWT.
                         .requestMatchers(HttpMethod.POST, "/api/chat/save").permitAll()
+                        // Delivery estimate preview — shown on public product/cart pages, no login needed.
+                        .requestMatchers(HttpMethod.POST, "/api/delivery/estimate").permitAll()
                         // WebSocket handshake endpoints — JWT auth happens inside STOMP CONNECT.
                         .requestMatchers("/ws/**", "/ws-sockjs/**").permitAll()
                         // REST helper to get room info (public — no sensitive data).

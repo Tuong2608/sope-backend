@@ -363,3 +363,23 @@ Khi kiểm tra API cần ghi:
 - Kiem tra: ./mvnw.cmd -DskipTests compile pass (135 file). Chua co Controller/Service nghiep vu - chi entity + repository dung ddl-auto=update de tao bang.
 - Luu y: discountValue dung BigDecimal (ap dung ca % lan VND tuy discountType); applicableProductIds/applicableCategories la @ElementCollection rieng, category la String giong Product.category (chua co entity Category rieng).
 - Viec can lam tiep theo: D03 (API quan ly coupon cho Admin), D04 (ham tinh tien don), D05 (API thu/ap ma), D06 (giu/tra luot voi concurrency).
+
+## 2026-07-13 - C02+C03+C04+C05: Khu vuc/phuong thuc giao hang, ngay nghi, tinh ETA, API xem truoc
+- Yeu cau: Tao phuong thuc/khu vuc giao hang + phi + so ngay (C02); gio chot don + ngay nghi (C03); ham tinh ngay giao du kien + test bien (C04); API xem truoc ngay giao public (C05).
+- Package lien quan: entity, repository, seeder, service, controller, dto/request, dto/response, config (SecurityConfig).
+- Da tao: entity/ShippingZone.java, ShippingMethod.java, ShippingRate.java, Holiday.java; repository/ShippingZoneRepository.java, ShippingMethodRepository.java, ShippingRateRepository.java, HolidayRepository.java; seeder/ShippingDataSeeder.java, HolidayDataSeeder.java (ApplicationRunner, @Profile("!test"), giong pattern LaptopDataSeeder); service/DeliveryEstimateService.java; controller/DeliveryController.java; dto/request/DeliveryEstimateRequest.java, DeliveryEstimateItemRequest.java; dto/response/DeliveryEstimateResponse.java; test/service/DeliveryEstimateServiceTest.java.
+- Da sua: config/SecurityConfig.java (them permitAll cho POST /api/delivery/estimate).
+- Endpoint: POST /api/delivery/estimate (public) - nhan {province, methodCode, items:[{productId,quantity}]}, tra {zoneName, methodCode, fee, estimatedMinDate, estimatedMaxDate, note}.
+- Thay doi: ShippingZone match theo danh sach tinh/thanh (uu tien theo field priority khi 1 tinh thuoc nhieu zone); ShippingRate = phi+minDays/maxDays cho tung cap (zone, method); DeliveryEstimateService: dat sau gio chot don (app.shipping.cutoff-hour, mac dinh 18h) -> +1 ngay xu ly; item thieu ton kho (Product.getAvailableQuantity()) -> cong them app.shipping.restock-delay-days (mac dinh 3); ngay giao roi vao Holiday -> doi sang ngay ke tiep.
+- Kiem tra: ./mvnw.cmd -DskipTests compile pass. DeliveryEstimateServiceTest 6/6 pass (truoc/sau gio chot don, ngay giao trung ngay nghi, het hang cong ngay, tinh khong thuoc zone nao, method khong co rate o zone). Da doi chieu: 2 loi CartServiceTest + EcommerceBackendApplicationTests.contextLoads la loi CO SAN tu truoc (tu B05 kiem tra ton kho gio hang + thieu cau hinh DB test cho @SpringBootTest), khong lien quan code hom nay - da verify bang git stash roi chay lai tren baseline truoc khi code.
+- Luu y: @Value co default (cutoff-hour:18, restock-delay-days:3) de khong phu thuoc application.properties (da bi gitignore, may dev khong co san). Chua co API quan tri Holiday/ShippingZone/Rate rieng - chi seed san du lieu mau, admin sua truc tiep qua DB neu can trong phase nay.
+- Viec can lam tiep theo: C06 (luu shipping method/phi/ETA vao Order, dung Address), C07 (chuyen trang thai don).
+
+## 2026-07-13 - D03: API quan ly ma giam gia cho Admin
+- Yeu cau: Admin them/sua/tat ma; kiem tra thoi gian, so luot, don toi thieu va muc giam toi da.
+- Package lien quan: dto/request, dto/response, service, controller/admin.
+- Da tao: dto/request/CouponRequest.java; dto/response/CouponResponse.java; service/CouponService.java; controller/admin/AdminCouponController.java.
+- Endpoint (/api/admin/coupons, ROLE_ADMIN - da duoc SecurityConfig phu san qua /api/admin/**, khong sua gi them): GET (loc ?active=), GET /{id}, POST, PUT /{id}, PUT /{id}/activate, PUT /{id}/deactivate.
+- Thay doi: CouponService validate discountValue PERCENTAGE <=100, scope=SPECIFIC_PRODUCTS/CATEGORIES phai co applicableProductIds/applicableCategories tuong ung, startAt<endAt neu ca 2 co gia tri, code duy nhat (uppercase hoa truoc khi luu/so sanh). "Tat ma" = toggle active=false, khong xoa cung (giu lich su CouponUsage).
+- Kiem tra: ./mvnw.cmd -DskipTests compile pass.
+- Viec can lam tiep theo: D04 (ham tinh tien don ap dung coupon), D05 (API thu/ap ma - doc lai gio hang, khong nhan tong tien tu frontend), D06 (giu/tra luot voi concurrency).
