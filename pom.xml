@@ -133,6 +133,13 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Rate Limiting -->
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j-core</artifactId>
+            <version>8.9.0</version>
+        </dependency>
+
         <!-- Google Identity Services ID token verification -->
         <dependency>
             <groupId>com.google.api-client</groupId>

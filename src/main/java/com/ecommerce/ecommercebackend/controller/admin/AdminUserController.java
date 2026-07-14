@@ -27,18 +27,23 @@ public class AdminUserController {
 
     @PutMapping("/{id}/role")
     public ResponseEntity<UserResponse> changeRole(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.ecommerce.ecommercebackend.entity.User currentUser,
             @PathVariable Long id,
             @Valid @RequestBody UpdateUserRoleRequest request) {
-        return ResponseEntity.ok(adminService.changeRole(id, request.getRole()));
+        return ResponseEntity.ok(adminService.changeRole(currentUser, id, request.getRole()));
     }
 
     @PutMapping("/{id}/lock")
-    public ResponseEntity<UserResponse> lock(@PathVariable Long id) {
-        return ResponseEntity.ok(adminService.setEnabled(id, false));
+    public ResponseEntity<UserResponse> lock(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.ecommerce.ecommercebackend.entity.User currentUser,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(adminService.setEnabled(currentUser, id, false));
     }
 
     @PutMapping("/{id}/unlock")
-    public ResponseEntity<UserResponse> unlock(@PathVariable Long id) {
-        return ResponseEntity.ok(adminService.setEnabled(id, true));
+    public ResponseEntity<UserResponse> unlock(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.ecommerce.ecommercebackend.entity.User currentUser,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(adminService.setEnabled(currentUser, id, true));
     }
 }
