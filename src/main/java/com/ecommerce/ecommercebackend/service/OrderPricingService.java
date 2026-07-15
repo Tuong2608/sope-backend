@@ -34,13 +34,27 @@ public class OrderPricingService {
 
     /**
      * Prices every item in {@code cart} and, if {@code couponCode} is given,
-     * validates and applies the coupon's discount.
+     * validates and applies the coupon's discount. Preview-only — does not lock
+     * the coupon row (see the 4-arg overload for actual checkout).
      *
      * @throws BadRequestException if the cart has an item with no price, or the
      *                             coupon is invalid/expired/exhausted/not applicable
      */
     @Transactional(readOnly = true)
     public OrderPricingResult price(Cart cart, String couponCode, User user) {
+        return price(cart, couponCode, user, false);
+    }
+
+    /**
+     * Same as {@link #price(Cart, String, User)}, but when {@code holdForCheckout}
+     * is {@code true} (task D06 — an order is actually being placed) the coupon
+     * row is locked ({@code SELECT ... FOR UPDATE}) for the caller's transaction
+     * and the usage-limit check also counts currently {@code HELD} redemptions
+     * from other in-flight checkouts, not just settled {@code USED} ones —
+     * otherwise two concurrent checkouts against a 1-use coupon could both see
+     * "still available" and both succeed.
+     */
+    public OrderPricingResult price(Cart cart, String couponCode, User user, boolean holdForCheckout) {
         List<OrderPricingResult.Item> items = new ArrayList<>();
         long subtotal = 0L;
 
@@ -69,7 +83,7 @@ public class OrderPricingService {
         long totalDiscount = 0L;
 
         if (StringUtils.hasText(couponCode)) {
-            coupon = resolveAndValidateCoupon(couponCode, subtotal, user);
+            coupon = resolveAndValidateCoupon(couponCode, subtotal, user, holdForCheckout);
             totalDiscount = applyDiscount(coupon, items, subtotal);
         }
 
@@ -83,9 +97,12 @@ public class OrderPricingService {
 
     // ── Coupon validation ────────────────────────────────────────────────────────
 
-    private Coupon resolveAndValidateCoupon(String rawCode, long subtotal, User user) {
+    private Coupon resolveAndValidateCoupon(
+            String rawCode, long subtotal, User user, boolean holdForCheckout) {
         String code = rawCode.trim().toUpperCase(Locale.ROOT);
-        Coupon coupon = couponRepository.findByCode(code)
+        Coupon coupon = (holdForCheckout
+                ? couponRepository.findByCodeForUpdate(code)
+                : couponRepository.findByCode(code))
                 .orElseThrow(() -> new BadRequestException("Mã giảm giá không tồn tại: " + code));
 
         if (!coupon.isActive()) {
@@ -94,7 +111,7 @@ public class OrderPricingService {
         if (!coupon.isWithinValidPeriod(LocalDateTime.now())) {
             throw new BadRequestException("Mã giảm giá đã hết hạn hoặc chưa bắt đầu.");
         }
-        if (coupon.hasReachedUsageLimit()) {
+        if (isUsageLimitExhausted(coupon, holdForCheckout)) {
             throw new BadRequestException("Mã giảm giá đã hết lượt sử dụng.");
         }
         if (coupon.getUsageLimitPerUser() != null) {
@@ -109,6 +126,25 @@ public class OrderPricingService {
                     "Đơn hàng tối thiểu " + coupon.getMinOrderAmount() + "đ để dùng mã này.");
         }
         return coupon;
+    }
+
+    /**
+     * At checkout (task D06), a slot is "used up" the moment it's held, not
+     * just once payment settles — so in-flight {@code HELD} redemptions from
+     * other checkouts must count against the limit too. Preview mode only
+     * looks at the settled {@code usedCount} (cheap, no lock, slightly
+     * optimistic — acceptable since it doesn't reserve anything).
+     */
+    private boolean isUsageLimitExhausted(Coupon coupon, boolean holdForCheckout) {
+        if (coupon.getUsageLimit() == null) {
+            return false;
+        }
+        long consumed = coupon.getUsedCount();
+        if (holdForCheckout) {
+            consumed += couponUsageRepository.countByCouponIdAndStatus(
+                    coupon.getId(), CouponUsageStatus.HELD);
+        }
+        return consumed >= coupon.getUsageLimit();
     }
 
     /** Computes and allocates the discount across items; returns the total discount. */

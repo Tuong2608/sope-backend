@@ -6,6 +6,7 @@ import com.ecommerce.ecommercebackend.dto.request.DeliveryEstimateRequest;
 import com.ecommerce.ecommercebackend.dto.response.DeliveryEstimateResponse;
 import com.ecommerce.ecommercebackend.dto.response.OrderItemResponse;
 import com.ecommerce.ecommercebackend.dto.response.OrderResponse;
+import com.ecommerce.ecommercebackend.dto.response.PagedResponse;
 import com.ecommerce.ecommercebackend.entity.*;
 import com.ecommerce.ecommercebackend.exception.BadRequestException;
 import com.ecommerce.ecommercebackend.exception.ResourceNotFoundException;
@@ -13,7 +14,12 @@ import com.ecommerce.ecommercebackend.repository.CartRepository;
 import com.ecommerce.ecommercebackend.repository.CouponRepository;
 import com.ecommerce.ecommercebackend.repository.CouponUsageRepository;
 import com.ecommerce.ecommercebackend.repository.OrderRepository;
+import com.ecommerce.ecommercebackend.repository.ShipmentTrackingRepository;
+import com.ecommerce.ecommercebackend.specification.OrderSpecifications;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +30,7 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -69,6 +76,8 @@ public class OrderService {
     private final DeliveryEstimateService deliveryEstimateService; // C04/C06
     private final CouponRepository couponRepository; // D04/C07
     private final CouponUsageRepository couponUsageRepository; // hold/use/release history
+    private final ShipmentTrackingService shipmentTrackingService; // C10
+    private final ShipmentTrackingRepository shipmentTrackingRepository; // C10 — lightweight lookup for toResponse
 
     // ── Create ──────────────────────────────────────────────────────────────────
 
@@ -89,7 +98,9 @@ public class OrderService {
             throw new BadRequestException("Giỏ hàng đang trống, không thể đặt hàng.");
         }
 
-        OrderPricingResult pricing = orderPricingService.price(cart, request.getCouponCode(), user);
+        // D06: hold=true locks the coupon row so concurrent checkouts can't both
+        // slip past its usage limit — see OrderPricingService for details.
+        OrderPricingResult pricing = orderPricingService.price(cart, request.getCouponCode(), user, true);
         DeliveryEstimateResponse delivery = estimateDelivery(request, cart);
 
         Order order = Order.builder()
@@ -219,13 +230,31 @@ public class OrderService {
 
     // ── Admin operations ──────────────────────────────────────────────────────────
 
-    /** All orders (optionally filtered by status), newest first. */
+    /**
+     * Task H03 — search/filter orders for the admin order management page.
+     * {@code keyword} matches order code, recipient name or phone;
+     * {@code from}/{@code to} filter by creation date (inclusive, either may be
+     * {@code null}). Any {@code null}/blank argument is ignored.
+     */
     @Transactional(readOnly = true)
-    public List<OrderResponse> getAllOrders(OrderStatus status) {
-        List<Order> orders = (status == null)
-                ? orderRepository.findAllByOrderByCreatedAtDesc()
-                : orderRepository.findByStatusOrderByCreatedAtDesc(status);
-        return orders.stream().map(this::toResponse).toList();
+    public PagedResponse<OrderResponse> searchOrders(
+            String keyword, OrderStatus status, LocalDate from, LocalDate to, Pageable pageable) {
+
+        Specification<Order> spec = (root, query, cb) -> cb.conjunction();
+        if (keyword != null && !keyword.isBlank()) {
+            spec = spec.and(OrderSpecifications.keywordContains(keyword));
+        }
+        if (status != null) {
+            spec = spec.and(OrderSpecifications.statusEquals(status));
+        }
+        if (from != null || to != null) {
+            spec = spec.and(OrderSpecifications.createdBetween(
+                    from != null ? from.atStartOfDay() : null,
+                    to != null ? to.atTime(23, 59, 59) : null));
+        }
+
+        Page<OrderResponse> page = orderRepository.findAll(spec, pageable).map(this::toResponse);
+        return PagedResponse.from(page);
     }
 
     /** Any order by id, regardless of owner (admin). */
@@ -261,6 +290,9 @@ public class OrderService {
                 inventoryService.restoreStockForOrder(saved);
             }
             releaseCouponHold(saved);
+        } else if (newStatus == OrderStatus.SHIPPING) {
+            // C10: sinh mã vận đơn giả lập ngay khi đơn thực sự bắt đầu giao.
+            shipmentTrackingService.createForOrder(saved);
         }
 
         return toResponse(saved);
@@ -332,6 +364,8 @@ public class OrderService {
                         .build())
                 .toList();
 
+        Optional<ShipmentTracking> tracking = shipmentTrackingRepository.findByOrderId(order.getId());
+
         return OrderResponse.builder()
                 .id(order.getId())
                 .orderCode(order.getOrderCode())
@@ -351,6 +385,8 @@ public class OrderService {
                 .note(order.getNote())
                 .items(items)
                 .createdAt(order.getCreatedAt())
+                .trackingNumber(tracking.map(ShipmentTracking::getTrackingNumber).orElse(null))
+                .trackingStatus(tracking.map(ShipmentTracking::getStatus).orElse(null))
                 .build();
     }
 }

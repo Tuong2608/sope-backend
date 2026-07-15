@@ -24,4 +24,7 @@ public interface CouponUsageRepository extends JpaRepository<CouponUsage, Long> 
             Long couponId, Long userId, CouponUsageStatus status);
 
     long countByCouponIdAndUserIdAndStatus(Long couponId, Long userId, CouponUsageStatus status);
+
+    /** Task D06 — number of slots currently held (not yet used) for a coupon. */
+    long countByCouponIdAndStatus(Long couponId, CouponUsageStatus status);
 }

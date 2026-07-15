@@ -148,6 +148,35 @@ class OrderPricingServiceTest {
                 .isInstanceOf(BadRequestException.class);
     }
 
+    // ── D06: concurrency — held slots count against the usage limit at checkout ──
+
+    @Test
+    void holdForCheckoutCountsHeldSlotsFromOtherUsersAgainstUsageLimit() {
+        Cart cart = cartWith(item(product(1L, "Laptop", "laptop", 10_000_000L), 1));
+        Coupon coupon = coupon("ONEUSE", DiscountType.PERCENTAGE, "10", CouponScope.ALL_ORDER, null, null);
+        coupon.setUsageLimit(1);
+        coupon.setUsedCount(0); // no one has finished checkout yet...
+        when(couponRepository.findByCodeForUpdate("ONEUSE")).thenReturn(Optional.of(coupon));
+        // ...but someone else is mid-checkout, holding the only slot.
+        when(couponUsageRepository.countByCouponIdAndStatus(1L, CouponUsageStatus.HELD)).thenReturn(1L);
+
+        assertThatThrownBy(() -> orderPricingService.price(cart, "ONEUSE", user, true))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void previewDoesNotCountHeldSlotsFromOtherCheckouts() {
+        Cart cart = cartWith(item(product(1L, "Laptop", "laptop", 10_000_000L), 1));
+        Coupon coupon = coupon("ONEUSE", DiscountType.PERCENTAGE, "10", CouponScope.ALL_ORDER, null, null);
+        coupon.setUsageLimit(1);
+        coupon.setUsedCount(0);
+        when(couponRepository.findByCode("ONEUSE")).thenReturn(Optional.of(coupon));
+
+        OrderPricingResult result = orderPricingService.price(cart, "ONEUSE", user, false);
+
+        assertThat(result.getDiscountAmount()).isGreaterThan(0L);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
     private Cart cartWith(CartItem... items) {

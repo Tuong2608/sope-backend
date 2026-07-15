@@ -16,6 +16,8 @@ import com.ecommerce.ecommercebackend.repository.CartRepository;
 import com.ecommerce.ecommercebackend.repository.CouponRepository;
 import com.ecommerce.ecommercebackend.repository.CouponUsageRepository;
 import com.ecommerce.ecommercebackend.repository.OrderRepository;
+import com.ecommerce.ecommercebackend.repository.ShipmentTrackingRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -24,11 +26,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -60,8 +65,19 @@ class OrderServiceTest {
     @Mock
     private CouponUsageRepository couponUsageRepository;
 
+    @Mock
+    private ShipmentTrackingService shipmentTrackingService;
+
+    @Mock
+    private ShipmentTrackingRepository shipmentTrackingRepository;
+
     @InjectMocks
     private OrderService orderService;
+
+    @BeforeEach
+    void stubNoTrackingByDefault() {
+        lenient().when(shipmentTrackingRepository.findByOrderId(anyLong())).thenReturn(Optional.empty());
+    }
 
     @Test
     void createOrderSnapshotsCartItemsAndClearsCart() {
@@ -77,7 +93,7 @@ class OrderServiceTest {
         CreateOrderRequest request = createOrderRequest(PaymentMethod.VNPAY);
 
         when(cartService.getOrCreateCart(user)).thenReturn(cart);
-        when(orderPricingService.price(cart, null, user)).thenReturn(
+        when(orderPricingService.price(cart, null, user, true)).thenReturn(
                 OrderPricingResult.builder()
                         .subtotalAmount(50_000_000L)
                         .discountAmount(0L)
@@ -180,6 +196,19 @@ class OrderServiceTest {
 
         verify(inventoryService, never()).restoreStockForOrder(any(Order.class));
         verify(inventoryService, never()).deductStockForOrder(any(Order.class));
+    }
+
+    @Test
+    void updateStatusFromProcessingToShippingCreatesTracking() {
+        Order order = orderInStatus(OrderStatus.PROCESSING);
+        when(orderRepository.findById(1L)).thenReturn(java.util.Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
+
+        orderService.updateStatus(1L, OrderStatus.SHIPPING);
+
+        verify(shipmentTrackingService).createForOrder(order);
+        verify(inventoryService, never()).deductStockForOrder(any(Order.class));
+        verify(inventoryService, never()).restoreStockForOrder(any(Order.class));
     }
 
     @Test

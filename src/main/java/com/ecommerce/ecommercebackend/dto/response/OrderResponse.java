@@ -2,6 +2,7 @@ package com.ecommerce.ecommercebackend.dto.response;
 
 import com.ecommerce.ecommercebackend.entity.OrderStatus;
 import com.ecommerce.ecommercebackend.entity.PaymentMethod;
+import com.ecommerce.ecommercebackend.entity.ShipmentStatus;
 import lombok.Builder;
 import lombok.Data;
 
@@ -36,6 +37,10 @@ public class OrderResponse {
     private LocalDate estimatedDeliveryMinDate;
     private LocalDate estimatedDeliveryMaxDate;
     private String note;
+
+    /** {@code null} until the order reaches SHIPPING (task C10). */
+    private String trackingNumber;
+    private ShipmentStatus trackingStatus;
 
     private List<OrderItemResponse> items;
     private LocalDateTime createdAt;
