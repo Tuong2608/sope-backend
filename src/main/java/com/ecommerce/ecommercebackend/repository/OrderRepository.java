@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -51,4 +52,51 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
                                com.ecommerce.ecommercebackend.entity.OrderStatus.COMPLETED)
             """)
     long totalRevenue();
+
+    // ── H02: Dashboard ─────────────────────────────────────────────────────
+
+    /** Doanh thu PAID/COMPLETED trong khoảng thời gian. */
+    @Query("""
+            SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o
+            WHERE o.status IN (com.ecommerce.ecommercebackend.entity.OrderStatus.PAID,
+                               com.ecommerce.ecommercebackend.entity.OrderStatus.COMPLETED)
+              AND o.createdAt >= :from AND o.createdAt <= :to
+            """)
+    long revenueByPeriod(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /** Số đơn hàng theo trạng thái trong khoảng thời gian. */
+    @Query("""
+            SELECT COUNT(o) FROM Order o
+            WHERE o.status = :status
+              AND o.createdAt >= :from AND o.createdAt <= :to
+            """)
+    long countByStatusAndPeriod(
+            @Param("status") OrderStatus status,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
+    /** Số đơn hàng mới trong khoảng thời gian (mọi trạng thái). */
+    @Query("""
+            SELECT COUNT(o) FROM Order o
+            WHERE o.createdAt >= :from AND o.createdAt <= :to
+            """)
+    long countByPeriod(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /** Top sản phẩm bán chạy: [productId, productName, totalQty, totalRevenue]. */
+    @Query("""
+            SELECT i.productId, i.productName,
+                   SUM(i.quantity)  AS totalQty,
+                   SUM(i.lineTotal) AS totalRevenue
+            FROM Order o JOIN o.items i
+            WHERE o.status IN (com.ecommerce.ecommercebackend.entity.OrderStatus.PAID,
+                               com.ecommerce.ecommercebackend.entity.OrderStatus.COMPLETED)
+              AND o.createdAt >= :from AND o.createdAt <= :to
+            GROUP BY i.productId, i.productName
+            ORDER BY totalQty DESC
+            LIMIT :limit
+            """)
+    List<Object[]> findTopSellingProducts(
+            @Param("from") LocalDateTime from,
+            @Param("to")   LocalDateTime to,
+            @Param("limit") int limit);
 }
