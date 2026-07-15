@@ -27,4 +27,7 @@ public class VnpayConfig {
 
     /** URL backend nhận IPN (Instant Payment Notification) từ VNPAY. */
     private String ipnUrl;
+
+    /** URL gọi API truy vấn / hoàn tiền VNPAY. */
+    private String apiUrl;
 }

@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -37,6 +38,18 @@ import java.util.Map;
 public class PaymentController {
 
     private final PaymentService paymentService;
+
+    @Value("${app.env:dev}")
+    private String appEnv;
+
+    // ── Configuration ─────────────────────────────────────────────────────────
+
+    @GetMapping("/config")
+    public ResponseEntity<Map<String, Object>> getConfig() {
+        Map<String, Object> config = new HashMap<>();
+        config.put("simulationEnabled", !"prod".equalsIgnoreCase(appEnv));
+        return ResponseEntity.ok(config);
+    }
 
     // ── Tạo link thanh toán ───────────────────────────────────────────────────
 
@@ -77,6 +90,9 @@ public class PaymentController {
     public ResponseEntity<PaymentResponse> simulateBankTransfer(
             @AuthenticationPrincipal User user,
             @PathVariable Long id) {
+        if ("prod".equalsIgnoreCase(appEnv)) {
+            throw new com.ecommerce.ecommercebackend.exception.BadRequestException("Simulated bank transfer is disabled in production.");
+        }
         return ResponseEntity.ok(paymentService.simulateBankTransfer(user, id));
     }
 

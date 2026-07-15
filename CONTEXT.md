@@ -323,7 +323,16 @@ Khi kiểm tra API cần ghi:
 ## 2026-07-08 - Fix brand filter fallback
 - Yeu cau: Loc hang iPhone/iPad khong ra san pham do DB hien tai brand rong, trong data goc brand la mang long nhau nhu iPhone (Apple), iPad (Apple).
 - Da sua: src/main/java/com/ecommerce/ecommercebackend/specification/ProductSpecifications.java; src/main/java/com/ecommerce/ecommercebackend/service/ProductService.java; src/main/java/com/ecommerce/ecommercebackend/seeder/DataSeeder.java.
-- Thay doi: brandContains tach brand query thanh cac term va match ca brand/name; Apple match iPhone/iPad/MacBook; response product suy luan brand tu name neu brand rong; DataSeeder doc first text trong mang long nhau de lan seed sau khong lam brand rong.
+- Thay doi: brandContains tach brand query thanh cac term va match ca brand/name; Apple match iPhone/iPad/MacBook; response product suy luan brand tu name neu brand rong; DataSeeder doc first text### Ngày 14/07/2026: Idempotency, Rate Limiting & Admin Security
+- **Yêu cầu xử lý:** Chống tạo đơn hai lần (Idempotency), Giới hạn API (Rate Limiting), Bảo vệ phòng chat WebSocket, Test phân quyền, Ngăn Admin tự khóa/tự giáng quyền.
+- **File thay đổi chính:**
+  - `OrderController.java`: Bổ sung ConcurrentHashMap cache cho Idempotency-Key.
+  - `RateLimitFilter.java` & `pom.xml`: Thêm thư viện `bucket4j-core` và config Filter.
+  - `WebSocketAuthInterceptor.java`: Chặn client gửi lệnh SUBSCRIBE sai user.
+  - `AdminUserController.java` & `AdminService.java`: Truyền current user và ném lỗi `BadRequestException` nếu tự khoá hoặc giáng cấp admin cuối cùng.
+  - `SecurityAccessIntegrationTest.java`: Viết Test JUnit xác minh quyền truy cập bằng TestRestTemplate & Unit Test Services.
+- **Thử nghiệm:** Chạy `./mvnw clean test` thành công (sau khi fix lỗi liên quan đến application-test.properties và MockMvc AutoConfigure).
+- **Trạng thái:** Hoàn tất 5 commits. Code an toàn.
 - Kiem tra: ./mvnw.cmd -q -DskipTests compile pass.
 - Luu y: DB hien co khong can reset; neu reset/seed lai thi brand se duoc import dung hon.
 
@@ -340,6 +349,17 @@ Khi kiểm tra API cần ghi:
 - Package lien quan: controller, controller/admin, service, repository, entity payment/order.
 - Da sua: controller/PaymentController.java; controller/admin/AdminPaymentController.java; service/PaymentService.java; repository/PaymentRepository.java.
 - Endpoint: POST /api/payment/create; POST /api/payment/{id}/simulate-bank-transfer; GET /api/admin/payments; GET /api/admin/stats.
-- Thay doi: simulateBankTransfer kiem tra payment thuoc user, chi nhan PENDING, tao transactionId SIM-*, cap nhat Payment SUCCESS va Order PAID; admin co API xem payment history theo status tuy chon.
+- Thay doi: simulateBankTransfer kiem tra payment thuoc user, chi nhan PENDING, tao tao transactionId SIM-*, cap nhat Payment SUCCESS va Order PAID; admin co API xem payment history theo status tuy chon.
 - Kiem tra: ./mvnw.cmd -q -DskipTests compile pass.
 - Luu y: GET /api/admin/stats tinh doanh thu tu order PAID/COMPLETED; neu user khong bam simulate thi payment van PENDING va doanh thu chua tang.
+
+## 2026-07-13 - Bảo mật luồng đăng nhập, API chat/rating, CORS
+- Yêu cầu: G03 Đăng nhập cookie HttpOnly, G04 Gửi link quên mật khẩu giả lập, G06 Bảo vệ API chat/rating khỏi giả mạo, G09 Cấu hình CORS/Security Headers.
+- Đã sửa: `AuthController.java`, `JwtAuthenticationFilter.java`, `AuthService.java`, `PasswordResetResponse.java`, `ChatController.java`, `ReviewController.java`, `SecurityConfig.java`.
+- Thay đổi: 
+  - G03: Bổ sung cookie HttpOnly cho `/login` và `/google`, `JwtAuthenticationFilter` hỗ trợ đọc token từ cookie, thêm `/logout` để xoá cookie.
+  - G04: Không trả `resetLink` và `expiresAt` trong HTTP response, giả lập việc gửi email link đổi mật khẩu (in ra console).
+  - G06: Bổ sung `@AuthenticationPrincipal` kiểm tra quyền cho `getHistory` trong `ChatController` và check X-Chatbot-Secret cho `save`. Review Controller đã an toàn nhờ kiểm tra user trong service.
+  - G09: Thêm `allowCredentials(true)` trong CORS và bổ sung Security Headers (frame options, xss, csp).
+- Kiểm tra: Maven build pass (`./mvnw clean package -DskipTests`).
+- Lưu ý: Frontend cần chú ý sử dụng config `withCredentials: true` do đã chuyển sang xác thực bằng HttpOnly Cookie.
