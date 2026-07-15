@@ -394,3 +394,13 @@ Khi kiểm tra API cần ghi:
 - Kiem tra: ./mvnw.cmd -DskipTests compile pass. OrderPricingServiceTest 7/7, OrderServiceTest 7/7 (bao gom 5 test C07 moi), DeliveryEstimateServiceTest 6/6, PaymentServiceTest 3/3, ProductRepositoryIntegrationTest 4/4 - tat ca pass. CartServiceTest + EcommerceBackendApplicationTests van loi (pre-existing tu truoc, da xac nhan khong lien quan qua git stash o PR ngay 13).
 - Luu y: CouponUsage duoc tao HELD ngay luc dat don (createOrder) neu co coupon hop le; markAsPaid/updateStatus(PAID) chuyen HELD->USED + Coupon.usedCount++; cancelOrder/updateStatus(CANCELLED) chuyen HELD->RELEASED. Day la nen tang co ban (chua co optimistic locking/concurrency that su) - D06 (ngay 15) se hoan thien chong race-condition khi nhieu nguoi dung cung mot ma cung luc.
 - Viec can lam tiep theo: D06 (khoa concurrency that su cho giu/tra luot coupon), C10 (dich vu van chuyen gia lap sinh ma van don), H03 (trang quan ly don nang cao - tim/loc/ETA/ma van don).
+
+## 2026-07-15 - H02+H09: Dashboard nang cao + Quan ly ton kho thu cong
+
+- Yeu cau: H02 - thong ke doanh thu hom nay/7/30 ngay, % tang truong, top SP ban chay; H09 - admin nhap hang, set stock, doi trang thai, cap nhat minStockLevel, bulk restock.
+- Package lien quan: repository, service, controller/admin.
+- Da tao: service/DashboardService.java (H02: DashboardOverview, PeriodRevenueStats, TopProductStats; tinh revenue/don theo ky, so sanh voi ky truoc); controller/admin/AdminDashboardController.java (/api/admin/dashboard/overview, /revenue, /top-products); service/AdminInventoryManagementService.java (H09: restockProduct, restockVariant, setStock, updateStatus, updateMinStockLevel, bulkRestock + auto chuyen ACTIVE/OUT_OF_STOCK); controller/admin/AdminInventoryManagementController.java (POST /restock/{id}, POST /restock/variant/{id}, POST /bulk-restock, PUT /set-stock/{id}, PUT /status/{id}, PUT /min-stock/{id}).
+- Da sua: repository/OrderRepository.java (them revenueByPeriod, countByStatusAndPeriod, countByPeriod, findTopSellingProducts voi @Param from/to/limit/status).
+- Endpoint (deu can ROLE_ADMIN): GET /api/admin/dashboard/overview; GET /api/admin/dashboard/revenue?from=&to=; GET /api/admin/dashboard/top-products?from=&to=&limit=10; POST /api/admin/inventory/restock/{productId}; POST /api/admin/inventory/restock/variant/{variantId}; POST /api/admin/inventory/bulk-restock; PUT /api/admin/inventory/set-stock/{productId}; PUT /api/admin/inventory/status/{productId}; PUT /api/admin/inventory/min-stock/{productId}.
+- Kiem tra: ./mvnw.cmd -DskipTests compile pass (BUILD SUCCESS).
+- Viec can lam tiep theo: D06 concurrency coupon, C10 ma van don, H03 quan ly don nang cao.
