@@ -39,6 +39,18 @@ public class PaymentController {
 
     private final PaymentService paymentService;
 
+    @Value("${app.env:dev}")
+    private String appEnv;
+
+    // ── Configuration ─────────────────────────────────────────────────────────
+
+    @GetMapping("/config")
+    public ResponseEntity<Map<String, Object>> getConfig() {
+        Map<String, Object> config = new HashMap<>();
+        config.put("simulationEnabled", !"prod".equalsIgnoreCase(appEnv));
+        return ResponseEntity.ok(config);
+    }
+
     // ── Tạo link thanh toán ───────────────────────────────────────────────────
 
     /**
@@ -81,9 +93,9 @@ public class PaymentController {
     public ResponseEntity<PaymentResponse> simulateBankTransfer(
             @AuthenticationPrincipal User user,
             @PathVariable Long id) {
-        if ("prod".equalsIgnoreCase(activeProfile)) {
-            throw new com.ecommerce.ecommercebackend.exception.BadRequestException(
-                    "Tính năng giả lập thanh toán đã bị khóa trên môi trường production.");
+
+        if ("prod".equalsIgnoreCase(appEnv)) {
+            throw new com.ecommerce.ecommercebackend.exception.BadRequestException("Simulated bank transfer is disabled in production.");
         }
         return ResponseEntity.ok(paymentService.simulateBankTransfer(user, id));
     }

@@ -13,6 +13,11 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.HttpEntity;
 
 /**
  * Service xử lý tích hợp thanh toán VNPAY.
@@ -26,6 +31,7 @@ import java.util.*;
 public class VnpayService {
 
     private final VnpayConfig vnpayConfig;
+    private final RestTemplate restTemplate;
 
     private static final String ALGORITHM = "HmacSHA512";
     private static final String VNP_VERSION = "2.1.0";
@@ -128,6 +134,79 @@ public class VnpayService {
      */
     public String extractTransactionId(Map<String, String> params) {
         return params.get("vnp_TransactionNo");
+    }
+
+    // ── Truy vấn trạng thái (QueryDR) ──────────────────────────────────────────
+
+    public Map<String, Object> queryTransaction(String orderId, String transDate, String ipAddress) {
+        String requestId = UUID.randomUUID().toString();
+        String createDate = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("vnp_RequestId", requestId);
+        params.put("vnp_Version", VNP_VERSION);
+        params.put("vnp_Command", "querydr");
+        params.put("vnp_TmnCode", vnpayConfig.getTmnCode());
+        params.put("vnp_TxnRef", orderId);
+        params.put("vnp_OrderInfo", "Query transaction " + orderId);
+        params.put("vnp_TransactionDate", transDate); // yyyyMMddHHmmss format from original payment
+        params.put("vnp_CreateDate", createDate);
+        params.put("vnp_IpAddr", ipAddress);
+
+        String hashData = requestId + "|" + VNP_VERSION + "|querydr|" + vnpayConfig.getTmnCode() + "|" 
+                + orderId + "|" + transDate + "|" + createDate + "|" + ipAddress + "|" + params.get("vnp_OrderInfo");
+        
+        String secureHash = hmacSHA512(vnpayConfig.getHashSecret(), hashData);
+        params.put("vnp_SecureHash", secureHash);
+
+        return sendPostRequest(vnpayConfig.getApiUrl(), params);
+    }
+
+    // ── Hoàn tiền (Refund) ──────────────────────────────────────────────────
+
+    public Map<String, Object> refundTransaction(String orderId, Long amount, String transDate, String user, String ipAddress) {
+        String requestId = UUID.randomUUID().toString();
+        String createDate = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("vnp_RequestId", requestId);
+        params.put("vnp_Version", VNP_VERSION);
+        params.put("vnp_Command", "refund");
+        params.put("vnp_TmnCode", vnpayConfig.getTmnCode());
+        params.put("vnp_TransactionType", "02"); // 02: Refund toàn phần, 03: Refund 1 phần
+        params.put("vnp_TxnRef", orderId);
+        params.put("vnp_Amount", amount * 100);
+        params.put("vnp_OrderInfo", "Refund order " + orderId);
+        params.put("vnp_TransactionDate", transDate);
+        params.put("vnp_CreateBy", user);
+        params.put("vnp_CreateDate", createDate);
+        params.put("vnp_IpAddr", ipAddress);
+
+        String hashData = requestId + "|" + VNP_VERSION + "|refund|" + vnpayConfig.getTmnCode() + "|02|"
+                + orderId + "|" + (amount * 100) + "|" + transDate + "|" + user + "|" + createDate + "|" 
+                + ipAddress + "|" + params.get("vnp_OrderInfo");
+
+        String secureHash = hmacSHA512(vnpayConfig.getHashSecret(), hashData);
+        params.put("vnp_SecureHash", secureHash);
+
+        return sendPostRequest(vnpayConfig.getApiUrl(), params);
+    }
+
+    private Map<String, Object> sendPostRequest(String url, Map<String, Object> payload) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+        
+        try {
+            ResponseEntity<Map> response = restTemplate.postForEntity(url, entity, Map.class);
+            return response.getBody();
+        } catch (Exception e) {
+            log.error("[VNPAY API] Call failed", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("vnp_ResponseCode", "99");
+            error.put("vnp_Message", "Exception: " + e.getMessage());
+            return error;
+        }
     }
 
     // ── HMAC-SHA512 ───────────────────────────────────────────────────────────

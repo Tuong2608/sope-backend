@@ -161,6 +161,74 @@ public class MomoService {
         return params.get("transId");
     }
 
+    // ── Truy vấn trạng thái (Query) ──────────────────────────────────────────
+
+    public Map<String, Object> queryTransaction(String orderId) {
+        String requestId = UUID.randomUUID().toString();
+        String requestType = "transactionStatus";
+        
+        String rawSignature = String.format(
+                "accessKey=%s&orderId=%s&partnerCode=%s&requestId=%s",
+                momoConfig.getAccessKey(), orderId, momoConfig.getPartnerCode(), requestId
+        );
+        String signature = hmacSHA256(momoConfig.getSecretKey(), rawSignature);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("partnerCode", momoConfig.getPartnerCode());
+        body.put("requestId", requestId);
+        body.put("orderId", orderId);
+        body.put("lang", "vi");
+        body.put("signature", signature);
+
+        return sendPostRequest(body);
+    }
+
+    // ── Hoàn tiền (Refund) ──────────────────────────────────────────────────
+
+    public Map<String, Object> refundTransaction(String orderId, Long amount, String transId) {
+        String requestId = UUID.randomUUID().toString();
+        
+        String rawSignature = String.format(
+                "accessKey=%s&amount=%s&description=%s&orderId=%s&partnerCode=%s&requestId=%s&transId=%s",
+                momoConfig.getAccessKey(), amount, "Refund order " + orderId, orderId, momoConfig.getPartnerCode(), requestId, transId
+        );
+        String signature = hmacSHA256(momoConfig.getSecretKey(), rawSignature);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("partnerCode", momoConfig.getPartnerCode());
+        body.put("requestId", requestId);
+        body.put("orderId", orderId);
+        body.put("amount", amount);
+        body.put("transId", transId);
+        body.put("lang", "vi");
+        body.put("description", "Refund order " + orderId);
+        body.put("signature", signature);
+
+        return sendPostRequest(body);
+    }
+
+    private Map<String, Object> sendPostRequest(Map<String, Object> body) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = webClientBuilder.build()
+                    .post()
+                    .uri(momoConfig.getEndpoint()) // using the same endpoint for pay, query, refund
+                    .header("Content-Type", "application/json")
+                    .bodyValue(body)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .map(m -> (Map<String, Object>) m)
+                    .block();
+            return response != null ? response : new HashMap<>();
+        } catch (Exception e) {
+            log.error("[MOMO API] Call failed", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("resultCode", 99);
+            error.put("message", "Exception: " + e.getMessage());
+            return error;
+        }
+    }
+
     // ── HMAC-SHA256 ───────────────────────────────────────────────────────────
 
     private String hmacSHA256(String key, String data) {

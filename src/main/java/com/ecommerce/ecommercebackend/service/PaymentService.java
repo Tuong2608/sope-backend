@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Service điều phối toàn bộ luồng thanh toán.
@@ -283,6 +284,56 @@ public class PaymentService {
         orderRepository.findByOrderCodeAndUserId(payment.getOrderId(), user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + id));
         return toResponse(payment);
+    }
+
+    @Transactional
+    public Map<String, Object> checkPaymentStatus(Long id, String ipAddress) {
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + id));
+
+        if (payment.getProvider() == PaymentProvider.VNPAY) {
+            String transDate = payment.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+            return vnpayService.queryTransaction(payment.getOrderId(), transDate, ipAddress);
+        } else if (payment.getProvider() == PaymentProvider.MOMO) {
+            return momoService.queryTransaction(payment.getOrderId());
+        }
+        throw new BadRequestException("Unsupported payment provider for status check");
+    }
+
+    @Transactional
+    public Map<String, Object> refundPayment(Long id, User user, String ipAddress) {
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + id));
+
+        if (payment.getStatus() != PaymentStatus.SUCCESS) {
+            throw new BadRequestException("Only successful payments can be refunded.");
+        }
+
+        Map<String, Object> result;
+        if (payment.getProvider() == PaymentProvider.VNPAY) {
+            String transDate = payment.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+            result = vnpayService.refundTransaction(payment.getOrderId(), payment.getAmount(), transDate, user.getEmail(), ipAddress);
+        } else if (payment.getProvider() == PaymentProvider.MOMO) {
+            result = momoService.refundTransaction(payment.getOrderId(), payment.getAmount(), payment.getTransactionId());
+        } else {
+            throw new BadRequestException("Unsupported payment provider for refund");
+        }
+
+        // Update status to REFUNDED if the provider accepted it
+        // Basic check for success response (VNPAY responseCode = 00, MoMo resultCode = 0)
+        boolean vnpaySuccess = payment.getProvider() == PaymentProvider.VNPAY && "00".equals(result.get("vnp_ResponseCode"));
+        boolean momoSuccess = payment.getProvider() == PaymentProvider.MOMO && String.valueOf(result.get("resultCode")).equals("0");
+
+        if (vnpaySuccess || momoSuccess) {
+            payment.setStatus(PaymentStatus.REFUNDED);
+            paymentRepository.save(payment);
+            orderRepository.findByOrderCode(payment.getOrderId()).ifPresent(order -> {
+                order.setStatus(OrderStatus.CANCELLED);
+                orderRepository.save(order);
+            });
+        }
+
+        return result;
     }
 
     @Transactional(readOnly = true)
