@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,18 +50,16 @@ public class RecommendationController {
     private final ProductService productService;
     private final RestTemplate restTemplate;
 
-    // URL cũ (Collaborative Filtering)
-    private static final String PYTHON_AI_URL = "http://localhost:8000/api/ai/recommend";
-    
-    // URL mới gọi sang FastAPI cho Content-Based
-    private static final String PYTHON_AI_CBF_URL = "http://localhost:8000/api/ai/recommend/content-based";
+    @Value("${app.chatbot.url:http://localhost:8000}")
+    private String chatbotUrl;
 
     // ── Gợi ý Collaborative Filtering cũ (Giữ nguyên nếu muốn) ──
     @GetMapping("/similar/{productId}")
     public ResponseEntity<List<ProductResponse>> getSimilarProducts(
             @PathVariable Long productId,
             @RequestParam(defaultValue = "5") int topN) {
-        List<Long> similarIds = fetchSimilarIdsFromPython(productId, topN, PYTHON_AI_URL + "/similar/{productId}?top_n={topN}");
+        List<Long> similarIds = fetchSimilarIdsFromPython(productId, topN,
+                chatbotBaseUrl() + "/api/ai/recommend/similar/{productId}?top_n={topN}");
         return ResponseEntity.ok(resolveProducts(similarIds));
     }
 
@@ -71,7 +70,8 @@ public class RecommendationController {
             @RequestParam(defaultValue = "5") int topN) {
         
         // Gọi sang endpoint CBF của Python
-        List<Long> similarIds = fetchSimilarIdsFromPython(productId, topN, PYTHON_AI_CBF_URL + "/{productId}?top_n={topN}");
+        List<Long> similarIds = fetchSimilarIdsFromPython(productId, topN,
+                chatbotBaseUrl() + "/api/ai/recommend/content-based/{productId}?top_n={topN}");
         return ResponseEntity.ok(resolveProducts(similarIds));
     }
 
@@ -101,6 +101,10 @@ public class RecommendationController {
             }
         }
         return result;
+    }
+
+    private String chatbotBaseUrl() {
+        return chatbotUrl.replaceAll("/+$", "");
     }
 
     /** Khớp cấu trúc JSON của endpoint FastAPI /api/ai/recommend/similar/{id}. */

@@ -126,13 +126,6 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- A09: H2 in-memory database cho test — không ảnh hưởng DB dev/prod -->
-        <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
-            <scope>test</scope>
-        </dependency>
-
         <!-- Rate Limiting -->
         <dependency>
             <groupId>com.bucket4j</groupId>

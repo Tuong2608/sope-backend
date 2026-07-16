@@ -1,6 +1,7 @@
 package com.ecommerce.ecommercebackend.config;
 
 import org.springframework.boot.restclient.RestTemplateBuilder;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestTemplate;
@@ -17,10 +18,13 @@ import java.time.Duration;
 public class RestTemplateConfig {
 
     @Bean
-    public RestTemplate restTemplate(RestTemplateBuilder builder) {
+    public RestTemplate restTemplate(
+            RestTemplateBuilder builder,
+            @Value("${app.http.connect-timeout:3s}") Duration connectTimeout,
+            @Value("${app.http.read-timeout:30s}") Duration readTimeout) {
         return builder
-                .connectTimeout(Duration.ofSeconds(3))
-                .readTimeout(Duration.ofSeconds(5))
+                .connectTimeout(connectTimeout)
+                .readTimeout(readTimeout)
                 .build();
     }
 }

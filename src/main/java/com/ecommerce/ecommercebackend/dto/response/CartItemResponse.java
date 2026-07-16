@@ -19,4 +19,9 @@ public class CartItemResponse {
     private int quantity;
     /** {@code price * quantity}; {@code null} when the product has no price yet. */
     private Long lineTotal;
+    private Long variantId;
+    private String colorName;
+    private String storageName;
+    private int availableQuantity;
+    private boolean inStock;
 }

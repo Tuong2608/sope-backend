@@ -4,6 +4,7 @@ import com.ecommerce.ecommercebackend.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -25,6 +26,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
+import java.util.Arrays;
 
 /**
  * Modern, component-based Spring Security configuration.
@@ -47,6 +49,9 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final UserDetailsService      userDetailsService;
 
+    @Value("${app.frontend.origins:http://localhost:3000,http://127.0.0.1:3000}")
+    private String frontendOrigins;
+
     // ── Security filter chain ─────────────────────────────────────────────────
 
     @Bean
@@ -63,6 +68,7 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
                         // Public catalog browsing: anyone can read products and their reviews.
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                         // Product recommendations are shown on public product detail pages.
@@ -74,6 +80,7 @@ public class SecurityConfig {
                                          "/api/payment/momo/callback",  "/api/payment/momo/ipn").permitAll()
                         // Chatbot (FastAPI) pushes messages server-to-server without a JWT.
                         .requestMatchers(HttpMethod.POST, "/api/chat/save").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/chat").permitAll()
                         // Delivery estimate preview — shown on public product/cart pages, no login needed.
                         .requestMatchers(HttpMethod.POST, "/api/delivery/estimate").permitAll()
                         // WebSocket handshake endpoints — JWT auth happens inside STOMP CONNECT.
@@ -129,12 +136,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(
-                "http://localhost:3000",
-                "http://localhost:3001",
-                "http://127.0.0.1:3000",
-                "http://127.0.0.1:3001"
-        ));
+        config.setAllowedOrigins(Arrays.stream(frontendOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Origin"));
         config.setExposedHeaders(List.of("Authorization"));

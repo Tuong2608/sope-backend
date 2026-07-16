@@ -10,17 +10,21 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 
 import java.io.InputStream;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Configuration
 public class DataSeeder {
 
     @Bean
+    @Order(15)
     CommandLineRunner initDatabase(ProductRepository productRepository) {
         return args -> {
-            if (productRepository.count() == 0) {
+            {
                 ObjectMapper mapper = new ObjectMapper();
                 mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
                 InputStream inputStream = TypeReference.class.getResourceAsStream("/data.json");
@@ -73,18 +77,44 @@ public class DataSeeder {
                             rootNode, 
                             new TypeReference<List<Product>>(){}
                     );
-                    
-                    productRepository.saveAll(products);
-                    
-                    System.out.println("✅ Import data từ data.json thành công! Đã clean format tiền tệ.");
+
+                    Set<String> existingSkus = new HashSet<>();
+                    productRepository.findAll().stream()
+                            .map(Product::getSku)
+                            .filter(sku -> sku != null && !sku.isBlank())
+                            .forEach(existingSkus::add);
+
+                    List<Product> missingProducts = products.stream()
+                            .filter(product -> product.getSku() == null
+                                    || product.getSku().isBlank()
+                                    || !existingSkus.contains(product.getSku()))
+                            .peek(DataSeeder::applyCatalogDefaults)
+                            .toList();
+
+                    if (missingProducts.isEmpty()) {
+                        System.out.println("DataSeeder: data.json đã được đồng bộ, không có sản phẩm mới.");
+                        return;
+                    }
+
+                    productRepository.saveAll(missingProducts);
+                    System.out.printf("DataSeeder: đã bổ sung %d sản phẩm còn thiếu từ data.json.%n",
+                            missingProducts.size());
                 } catch (Exception e) {
                     System.err.println("❌ Quá trình import thất bại. Lỗi chi tiết: " + e.getMessage());
                     e.printStackTrace();
                 }
-            } else {
-                System.out.println("⚡ Bảng products đã có dữ liệu, bỏ qua bước import.");
             }
         };
+    }
+
+    private static void applyCatalogDefaults(Product product) {
+        if (product.getImgUrl() == null || product.getImgUrl().isBlank()) {
+            product.setImgUrl(product.getMainThumbnail());
+        }
+        product.setStockQuantity(50);
+        product.setReservedQuantity(0);
+        product.setMinStockLevel(5);
+        product.setStatus(com.ecommerce.ecommercebackend.entity.ProductStatus.ACTIVE);
     }
 
     private static String firstTextValue(JsonNode node) {

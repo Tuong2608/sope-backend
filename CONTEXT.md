@@ -362,3 +362,14 @@ Khi kiểm tra API cần ghi:
   - G09: Thêm `allowCredentials(true)` trong CORS và bổ sung Security Headers (frame options, xss, csp).
 - Kiểm tra: Maven build pass (`./mvnw clean package -DskipTests`).
 - Lưu ý: Frontend cần chú ý sử dụng config `withCredentials: true` do đã chuyển sang xác thực bằng HttpOnly Cookie.
+
+## 2026-07-16 - Catalog, C08/H06, cart và chatbot proxy
+
+- Yêu cầu: tích hợp Backend với MySQL thật, Frontend và Chatbot; hoàn thiện API cart, shipping, health và production config.
+- Đã sửa: `DataSeeder`, cart DTO/repository/service/test, security/CORS, RestTemplate timeout, exception handler, chat/recommendation controllers; thêm health controller, admin shipping controller/service và DTO chat; cập nhật test config, env example và application local.
+- Catalog: seeder idempotent theo SKU, chạy trước laptop mẫu, chỉ thêm bản ghi thiếu; đã bổ sung 266 sản phẩm mà không xóa/ghi đè dữ liệu hiện có.
+- Cart: entity graph tải items/product/variant; response có `variantId`, `colorName`, `storageName`, `availableQuantity`, `inStock`; validate variant thuộc product, active và đủ tồn kho.
+- Chat: POST `/api/chat` proxy FastAPI; URL/timeout từ env; `ResponseStatusException` giữ đúng HTTP status; `/api/health` kiểm tra `SELECT 1`.
+- H06: GET methods/zones/rates và PATCH trạng thái, chỉ ROLE_ADMIN; frontend dùng trực tiếp các endpoint này.
+- Kiểm tra: Maven test/package pass; runtime health/database UP; delivery estimate UTF-8 pass; catalog 162 phone/54 tablet/60 laptop; search iPhone 12 kết quả; chat proxy trả dữ liệu catalog thật.
+- Việc tiếp theo: cần credential admin hiện tại để smoke test runtime có JWT cho cart/H06; không tự đồng bộ/ghi đè mật khẩu admin trong DB.

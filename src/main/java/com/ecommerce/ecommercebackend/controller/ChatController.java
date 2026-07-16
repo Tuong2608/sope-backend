@@ -1,6 +1,8 @@
 package com.ecommerce.ecommercebackend.controller;
 
 import com.ecommerce.ecommercebackend.dto.request.SaveChatRequest;
+import com.ecommerce.ecommercebackend.dto.request.ChatbotRequest;
+import com.ecommerce.ecommercebackend.dto.response.ChatbotResponse;
 import com.ecommerce.ecommercebackend.dto.response.ChatSessionResponse;
 import com.ecommerce.ecommercebackend.dto.response.SaveChatResponse;
 import com.ecommerce.ecommercebackend.service.ChatService;
@@ -14,6 +16,10 @@ import com.ecommerce.ecommercebackend.entity.Role;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 import java.util.List;
 
@@ -34,9 +40,37 @@ import java.util.List;
 public class ChatController {
 
     private final ChatService chatService;
+    private final RestTemplate restTemplate;
+
+    @Value("${app.chatbot.url:http://localhost:8000}")
+    private String chatbotUrl;
 
     @Value("${app.chatbot.secret:}")
     private String chatbotSecret;
+
+    /** Proxies browser chat requests to FastAPI so the frontend never calls Gemini directly. */
+    @PostMapping
+    public ResponseEntity<ChatbotResponse> chat(
+            @Valid @RequestBody ChatbotRequest request,
+            @AuthenticationPrincipal User user) {
+        String userId = user == null ? "anonymous" : String.valueOf(user.getId());
+        try {
+            ChatbotResponse response = restTemplate.postForObject(
+                    chatbotUrl.replaceAll("/+$", "") + "/api/chat",
+                    new FastApiChatRequest(userId, request.getMessage()),
+                    ChatbotResponse.class);
+            if (response == null || !StringUtils.hasText(response.getReply())) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        "Chatbot không trả về phản hồi hợp lệ");
+            }
+            return ResponseEntity.ok(response);
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (RestClientException ex) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Dịch vụ chatbot hiện không khả dụng");
+        }
+    }
 
     /**
      * Receives one conversation turn from the chatbot and stores it.
@@ -73,4 +107,6 @@ public class ChatController {
         }
         return ResponseEntity.ok(chatService.getHistory(userId));
     }
+
+    private record FastApiChatRequest(String user_id, String message) {}
 }

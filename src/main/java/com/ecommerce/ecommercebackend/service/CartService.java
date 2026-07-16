@@ -61,6 +61,12 @@ public class CartService {
             variant = variantRepository.findById(request.getVariantId())
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Variant not found: " + request.getVariantId()));
+            if (!variant.getProduct().getId().equals(product.getId())) {
+                throw new BadRequestException("Phiên bản không thuộc sản phẩm đã chọn");
+            }
+            if (!variant.isActive()) {
+                throw new BadRequestException("Phiên bản sản phẩm hiện không còn được bán");
+            }
         }
 
         // B05: Kiểm tra tồn kho trước khi thêm
@@ -109,6 +115,12 @@ public class CartService {
     public CartResponse updateItem(User user, Long itemId, UpdateCartItemRequest request) {
         Cart cart = getOrCreateCart(user);
         CartItem item = findItemOrThrow(cart, itemId);
+        int available = item.getVariant() != null
+                ? item.getVariant().getAvailableQuantity()
+                : item.getProduct().getAvailableQuantity();
+        if (request.getQuantity() > available) {
+            throw new BadRequestException("Chỉ còn " + available + " sản phẩm trong kho");
+        }
         item.setQuantity(request.getQuantity());
         return toResponse(cartRepository.save(cart));
     }
@@ -175,6 +187,10 @@ public class CartService {
                 ? variant.getPrice()
                 : product.getPrice();
         Long lineTotal = (price == null) ? null : price * item.getQuantity();
+        int availableQuantity = variant != null
+                ? variant.getAvailableQuantity()
+                : product.getAvailableQuantity();
+        boolean inStock = availableQuantity > 0 && (variant == null || variant.isActive());
 
         return CartItemResponse.builder()
                 .id(item.getId())
@@ -185,6 +201,11 @@ public class CartService {
                 .price(price)
                 .quantity(item.getQuantity())
                 .lineTotal(lineTotal)
+                .variantId(variant != null ? variant.getId() : null)
+                .colorName(variant != null ? variant.getColorName() : null)
+                .storageName(variant != null ? variant.getStorageName() : null)
+                .availableQuantity(availableQuantity)
+                .inStock(inStock)
                 .build();
     }
 }
