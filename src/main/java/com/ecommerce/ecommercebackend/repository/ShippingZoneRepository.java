@@ -6,11 +6,12 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
-/**
- * Spring Data JPA repository for {@link ShippingZone} persistence.
- */
 @Repository
 public interface ShippingZoneRepository extends JpaRepository<ShippingZone, Long> {
 
     List<ShippingZone> findByActiveTrueOrderByPriorityAsc();
+
+    boolean existsByNameIgnoreCase(String name);
+
+    boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);
 }

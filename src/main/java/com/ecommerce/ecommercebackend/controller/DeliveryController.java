@@ -11,11 +11,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Public endpoint for previewing shipping fee and delivery window (task C05).
- * Callers (product page or cart) send a province + optional line items and get
- * back the fee and estimated arrival date range — no login required.
- */
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/delivery")
 @RequiredArgsConstructor
@@ -27,5 +24,16 @@ public class DeliveryController {
     public ResponseEntity<DeliveryEstimateResponse> estimate(
             @Valid @RequestBody DeliveryEstimateRequest request) {
         return ResponseEntity.ok(deliveryEstimateService.estimate(request));
+    }
+
+    /**
+     * Returns every active shipping option configured for the supplied province.
+     * Checkout uses this endpoint so Admin shipping changes are reflected without
+     * hard-coding STANDARD/EXPRESS on the frontend.
+     */
+    @PostMapping("/options")
+    public ResponseEntity<List<DeliveryEstimateResponse>> options(
+            @Valid @RequestBody DeliveryEstimateRequest request) {
+        return ResponseEntity.ok(deliveryEstimateService.estimateOptions(request));
     }
 }

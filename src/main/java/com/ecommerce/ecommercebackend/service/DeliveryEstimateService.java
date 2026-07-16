@@ -23,12 +23,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * Computes the shipping fee and expected delivery window for an order
- * (task C04): zone (by province) + method → base fee/days; late orders (past
- * the daily cutoff) and out-of-stock items push the window back further;
- * the final dates skip configured {@link com.ecommerce.ecommercebackend.entity.Holiday}s.
- */
 @Service
 @RequiredArgsConstructor
 public class DeliveryEstimateService {
@@ -41,52 +35,68 @@ public class DeliveryEstimateService {
     private final HolidayRepository holidayRepository;
     private final ProductRepository productRepository;
 
-    /** Hour of day (Vietnam local time) after which an order is processed the next day. */
     @Value("${app.shipping.cutoff-hour:18}")
     private int cutoffHour;
 
-    /** Extra days added to the window when an item doesn't have enough stock. */
     @Value("${app.shipping.restock-delay-days:3}")
     private int restockDelayDays;
 
-    /** Estimates using the current time as the order time. */
     @Transactional(readOnly = true)
     public DeliveryEstimateResponse estimate(DeliveryEstimateRequest request) {
         return estimate(request, LocalDateTime.now());
     }
 
-    /**
-     * Estimates using an explicit order time — the overload unit tests use to
-     * exercise cutoff-hour edge cases deterministically.
-     *
-     * @throws BadRequestException if the province matches no zone, or the zone
-     *                             has no rate configured for the requested method
-     */
     @Transactional(readOnly = true)
     public DeliveryEstimateResponse estimate(DeliveryEstimateRequest request, LocalDateTime orderTime) {
         ShippingZone zone = findZone(request.getProvince());
-
         String methodCode = StringUtils.hasText(request.getMethodCode())
                 ? request.getMethodCode().trim()
                 : DEFAULT_METHOD_CODE;
+
         ShippingMethod method = methodRepository.findByCodeIgnoreCase(methodCode)
+                .filter(ShippingMethod::isActive)
                 .orElseThrow(() -> new BadRequestException(
-                        "Phương thức giao hàng không hợp lệ: " + methodCode));
+                        "Phương thức giao hàng không hợp lệ hoặc đang tạm ngưng: " + methodCode));
 
-        ShippingRate rate = rateRepository.findByZoneIdAndMethodIdAndActiveTrue(zone.getId(), method.getId())
-                .orElseThrow(() -> new BadRequestException(
-                        "Khu vực '" + zone.getName() + "' chưa hỗ trợ phương thức " + method.getName()));
+        ShippingRate rate = findActiveRate(zone, method);
+        return buildEstimate(request, orderTime, zone, method, rate);
+    }
 
+    /** Returns all active method/rate combinations available for one province. */
+    @Transactional(readOnly = true)
+    public List<DeliveryEstimateResponse> estimateOptions(DeliveryEstimateRequest request) {
+        ShippingZone zone = findZone(request.getProvince());
+        LocalDateTime orderTime = LocalDateTime.now();
+
+        List<DeliveryEstimateResponse> options = methodRepository.findByActiveTrueOrderByNameAsc().stream()
+                .map(method -> rateRepository
+                        .findByZoneIdAndMethodIdAndActiveTrue(zone.getId(), method.getId())
+                        .map(rate -> buildEstimate(request, orderTime, zone, method, rate))
+                        .orElse(null))
+                .filter(option -> option != null)
+                .toList();
+
+        if (options.isEmpty()) {
+            throw new BadRequestException(
+                    "Khu vực '" + zone.getName() + "' chưa có phương thức giao hàng đang hoạt động.");
+        }
+        return options;
+    }
+
+    private DeliveryEstimateResponse buildEstimate(
+            DeliveryEstimateRequest request,
+            LocalDateTime orderTime,
+            ShippingZone zone,
+            ShippingMethod method,
+            ShippingRate rate) {
         LocalDate baseDate = isPastCutoff(orderTime)
                 ? orderTime.toLocalDate().plusDays(1)
                 : orderTime.toLocalDate();
 
         boolean needsRestock = hasOutOfStockItem(request.getItems());
-        int minDays = rate.getMinDays() + (needsRestock ? restockDelayDays : 0);
-        int maxDays = rate.getMaxDays() + (needsRestock ? restockDelayDays : 0);
-
-        LocalDate estimatedMinDate = addDaysSkippingHolidays(baseDate, minDays);
-        LocalDate estimatedMaxDate = addDaysSkippingHolidays(baseDate, maxDays);
+        int extraDays = needsRestock ? restockDelayDays : 0;
+        LocalDate estimatedMinDate = addDaysSkippingHolidays(baseDate, rate.getMinDays() + extraDays);
+        LocalDate estimatedMaxDate = addDaysSkippingHolidays(baseDate, rate.getMaxDays() + extraDays);
 
         return DeliveryEstimateResponse.builder()
                 .zoneName(zone.getName())
@@ -101,13 +111,21 @@ public class DeliveryEstimateService {
                 .build();
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────────
+    private ShippingRate findActiveRate(ShippingZone zone, ShippingMethod method) {
+        return rateRepository.findByZoneIdAndMethodIdAndActiveTrue(zone.getId(), method.getId())
+                .orElseThrow(() -> new BadRequestException(
+                        "Khu vực '" + zone.getName() + "' chưa hỗ trợ phương thức " + method.getName()));
+    }
 
     private ShippingZone findZone(String province) {
-        String normalized = province.trim();
+        String normalized = province == null ? "" : province.trim();
+        if (normalized.isEmpty()) {
+            throw new BadRequestException("Tỉnh/thành không được để trống.");
+        }
+
         return zoneRepository.findByActiveTrueOrderByPriorityAsc().stream()
                 .filter(zone -> zone.getProvinces().stream()
-                        .anyMatch(p -> p.equalsIgnoreCase(normalized)))
+                        .anyMatch(value -> value.equalsIgnoreCase(normalized)))
                 .findFirst()
                 .orElseThrow(() -> new BadRequestException(
                         "Chưa hỗ trợ giao hàng tới tỉnh/thành: " + province));
@@ -130,7 +148,6 @@ public class DeliveryEstimateService {
         return false;
     }
 
-    /** Adds {@code days} calendar days, then rolls forward past any configured holiday. */
     private LocalDate addDaysSkippingHolidays(LocalDate start, int days) {
         LocalDate date = start.plusDays(days);
         while (holidayRepository.existsByDate(date)) {

@@ -6,11 +6,16 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
-/**
- * Spring Data JPA repository for {@link ShippingRate} persistence.
- */
 @Repository
 public interface ShippingRateRepository extends JpaRepository<ShippingRate, Long> {
 
     Optional<ShippingRate> findByZoneIdAndMethodIdAndActiveTrue(Long zoneId, Long methodId);
+
+    boolean existsByZoneIdAndMethodId(Long zoneId, Long methodId);
+
+    boolean existsByZoneIdAndMethodIdAndIdNot(Long zoneId, Long methodId, Long id);
+
+    long countByZoneId(Long zoneId);
+
+    long countByMethodId(Long methodId);
 }
