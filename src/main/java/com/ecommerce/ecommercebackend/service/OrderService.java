@@ -207,9 +207,20 @@ public class OrderService {
      */
     @Transactional
     public void markAsPaid(String orderCode) {
-        Order order = orderRepository.findByOrderCode(orderCode)
+        Order order = orderRepository.findLockedByOrderCode(orderCode)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Order not found with code: " + orderCode));
+
+        if (order.getStatus() == OrderStatus.PAID
+                || order.getStatus() == OrderStatus.PROCESSING
+                || order.getStatus() == OrderStatus.SHIPPING
+                || order.getStatus() == OrderStatus.COMPLETED) {
+            return;
+        }
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new BadRequestException(
+                    "Không thể xác nhận thanh toán cho đơn hàng ở trạng thái " + order.getStatus() + ".");
+        }
         order.setStatus(OrderStatus.PAID);
         Order saved = orderRepository.save(order);
         // B08: Giảm tồn kho khi đơn hàng được thanh toán thành công

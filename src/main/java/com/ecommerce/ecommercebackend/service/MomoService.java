@@ -11,9 +11,9 @@ import org.springframework.web.reactive.function.client.WebClient;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Service xử lý tích hợp thanh toán MoMo Sandbox.
@@ -30,7 +30,14 @@ public class MomoService {
     private final WebClient.Builder webClientBuilder;
 
     private static final String ALGORITHM    = "HmacSHA256";
-    private static final String REQUEST_TYPE = "payWithMethod";
+    public record CreateResult(
+            String providerOrderId,
+            String providerRequestId,
+            String payUrl,
+            String deeplink,
+            String qrCodeUrl,
+            String resultCode,
+            String message) {}
 
     // ── Tạo link thanh toán ───────────────────────────────────────────────────
 
@@ -42,9 +49,14 @@ public class MomoService {
      * @param orderInfo Nội dung thanh toán
      * @return URL trang thanh toán MoMo (dạng {@code https://test-payment.momo.vn/...})
      */
-    public String createPaymentUrl(String orderId, Long amount, String orderInfo) {
-        String requestId = UUID.randomUUID().toString();
+    public CreateResult createPayment(
+            String providerOrderId,
+            String requestId,
+            Long amount,
+            String orderInfo) {
+        requireConfigured();
         String extraData = "";
+        String requestType = momoConfig.getRequestType();
 
         // Raw signature string — thứ tự tham số theo đúng tài liệu MoMo
         String rawSignature = String.format(
@@ -52,13 +64,13 @@ public class MomoService {
                 momoConfig.getAccessKey(),
                 amount,
                 extraData,
-                momoConfig.getNotifyUrl(),
-                orderId,
+                momoConfig.getIpnUrl(),
+                providerOrderId,
                 orderInfo,
                 momoConfig.getPartnerCode(),
-                momoConfig.getReturnUrl(),
+                momoConfig.getRedirectUrl(),
                 requestId,
-                REQUEST_TYPE
+                requestType
         );
 
         String signature = hmacSHA256(momoConfig.getSecretKey(), rawSignature);
@@ -68,16 +80,16 @@ public class MomoService {
         body.put("partnerCode",  momoConfig.getPartnerCode());
         body.put("requestId",    requestId);
         body.put("amount",       amount);
-        body.put("orderId",      orderId);
+        body.put("orderId",      providerOrderId);
         body.put("orderInfo",    orderInfo);
-        body.put("redirectUrl",  momoConfig.getReturnUrl());
-        body.put("ipnUrl",       momoConfig.getNotifyUrl());
-        body.put("requestType",  REQUEST_TYPE);
+        body.put("redirectUrl",  momoConfig.getRedirectUrl());
+        body.put("ipnUrl",       momoConfig.getIpnUrl());
+        body.put("requestType",  requestType);
         body.put("extraData",    extraData);
         body.put("lang",         "vi");
         body.put("signature",    signature);
 
-        log.info("[MOMO] Gọi API tạo thanh toán cho đơn hàng {}", orderId);
+        log.info("[MOMO] Gọi API tạo thanh toán providerOrderId={}", providerOrderId);
 
         // Gọi MoMo API và lấy payUrl
         @SuppressWarnings("unchecked")
@@ -89,22 +101,34 @@ public class MomoService {
                 .retrieve()
                 .bodyToMono(Map.class)
                 .map(m -> (Map<String, Object>) m)
-                .block();
+                .block(Duration.ofSeconds(35));
 
         if (response == null) {
-            throw new RuntimeException("MoMo API không trả về response");
+            throw new IllegalStateException("MoMo API không trả về response");
         }
 
         Object resultCode = response.get("resultCode");
         if (resultCode == null || !resultCode.toString().equals("0")) {
             String msg = response.getOrDefault("message", "Lỗi không xác định").toString();
             log.error("[MOMO] Tạo giao dịch thất bại: resultCode={}, message={}", resultCode, msg);
-            throw new RuntimeException("MoMo tạo giao dịch thất bại: " + msg);
+            throw new IllegalStateException("MoMo tạo giao dịch thất bại: " + msg);
         }
 
         String payUrl = (String) response.get("payUrl");
-        log.info("[MOMO] Tạo link thành công cho đơn hàng {}: {}", orderId, payUrl);
-        return payUrl;
+        if (payUrl == null || payUrl.isBlank()) {
+            throw new IllegalStateException("MoMo không trả về payUrl hợp lệ");
+        }
+        String deeplink = asString(response.get("deeplink"));
+        String qrCodeUrl = firstHttpUrl(response.get("qrCodeUrl"), response.get("qrCode"));
+        log.info("[MOMO] Tạo link thành công providerOrderId={}", providerOrderId);
+        return new CreateResult(
+                asString(response.getOrDefault("orderId", providerOrderId)),
+                asString(response.getOrDefault("requestId", requestId)),
+                payUrl,
+                deeplink,
+                qrCodeUrl,
+                String.valueOf(resultCode),
+                asString(response.get("message")));
     }
 
     // ── Xác thực chữ ký ──────────────────────────────────────────────────────
@@ -116,6 +140,7 @@ public class MomoService {
      * @return {@code true} nếu chữ ký hợp lệ
      */
     public boolean verifySignature(Map<String, String> params) {
+        if (isBlank(momoConfig.getAccessKey()) || isBlank(momoConfig.getSecretKey())) return false;
         String receivedSignature = params.get("signature");
         if (receivedSignature == null) return false;
 
@@ -143,6 +168,10 @@ public class MomoService {
         return valid;
     }
 
+    public boolean hasExpectedPartnerCode(Map<String, String> params) {
+        return java.util.Objects.equals(momoConfig.getPartnerCode(), params.get("partnerCode"));
+    }
+
     /**
      * Phân tích kết quả từ tham số IPN/callback của MoMo.
      *
@@ -151,7 +180,11 @@ public class MomoService {
      */
     public PaymentStatus resolveStatus(Map<String, String> params) {
         String resultCode = params.getOrDefault("resultCode", "-1");
-        return "0".equals(resultCode) ? PaymentStatus.SUCCESS : PaymentStatus.FAILED;
+        if ("0".equals(resultCode)) return PaymentStatus.SUCCESS;
+        if ("7000".equals(resultCode) || "9000".equals(resultCode)) return PaymentStatus.PROCESSING;
+        if ("1006".equals(resultCode)) return PaymentStatus.CANCELLED;
+        if ("1005".equals(resultCode)) return PaymentStatus.EXPIRED;
+        return PaymentStatus.FAILED;
     }
 
     /**
@@ -164,8 +197,7 @@ public class MomoService {
     // ── Truy vấn trạng thái (Query) ──────────────────────────────────────────
 
     public Map<String, Object> queryTransaction(String orderId) {
-        String requestId = UUID.randomUUID().toString();
-        String requestType = "transactionStatus";
+        String requestId = java.util.UUID.randomUUID().toString();
         
         String rawSignature = String.format(
                 "accessKey=%s&orderId=%s&partnerCode=%s&requestId=%s",
@@ -180,13 +212,13 @@ public class MomoService {
         body.put("lang", "vi");
         body.put("signature", signature);
 
-        return sendPostRequest(body);
+        return sendPostRequest(momoConfig.getQueryEndpoint(), body);
     }
 
     // ── Hoàn tiền (Refund) ──────────────────────────────────────────────────
 
     public Map<String, Object> refundTransaction(String orderId, Long amount, String transId) {
-        String requestId = UUID.randomUUID().toString();
+        String requestId = java.util.UUID.randomUUID().toString();
         
         String rawSignature = String.format(
                 "accessKey=%s&amount=%s&description=%s&orderId=%s&partnerCode=%s&requestId=%s&transId=%s",
@@ -204,21 +236,21 @@ public class MomoService {
         body.put("description", "Refund order " + orderId);
         body.put("signature", signature);
 
-        return sendPostRequest(body);
+        return sendPostRequest(momoConfig.getRefundEndpoint(), body);
     }
 
-    private Map<String, Object> sendPostRequest(Map<String, Object> body) {
+    private Map<String, Object> sendPostRequest(String endpoint, Map<String, Object> body) {
         try {
             @SuppressWarnings("unchecked")
             Map<String, Object> response = webClientBuilder.build()
                     .post()
-                    .uri(momoConfig.getEndpoint()) // using the same endpoint for pay, query, refund
+                    .uri(endpoint)
                     .header("Content-Type", "application/json")
                     .bodyValue(body)
                     .retrieve()
                     .bodyToMono(Map.class)
                     .map(m -> (Map<String, Object>) m)
-                    .block();
+                    .block(Duration.ofSeconds(35));
             return response != null ? response : new HashMap<>();
         } catch (Exception e) {
             log.error("[MOMO API] Call failed", e);
@@ -240,5 +272,32 @@ public class MomoService {
         } catch (Exception e) {
             throw new RuntimeException("Lỗi khi tạo chữ ký HMAC-SHA256", e);
         }
+    }
+
+    private String asString(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    private String firstHttpUrl(Object... values) {
+        for (Object value : values) {
+            String candidate = asString(value);
+            if (candidate != null && (candidate.startsWith("https://") || candidate.startsWith("http://"))) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private void requireConfigured() {
+        if (isBlank(momoConfig.getPartnerCode()) || isBlank(momoConfig.getAccessKey())
+                || isBlank(momoConfig.getSecretKey()) || isBlank(momoConfig.getEndpoint())
+                || isBlank(momoConfig.getRedirectUrl()) || isBlank(momoConfig.getIpnUrl())
+                || isBlank(momoConfig.getRequestType())) {
+            throw new IllegalStateException("MoMo Sandbox chưa được cấu hình đầy đủ");
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

@@ -10,12 +10,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.net.URI;
+import java.util.stream.Collectors;
 
 /**
  * REST controller xử lý tất cả các API liên quan đến thanh toán.
@@ -39,17 +42,8 @@ public class PaymentController {
 
     private final PaymentService paymentService;
 
-    @Value("${app.env:dev}")
-    private String appEnv;
-
-    // ── Configuration ─────────────────────────────────────────────────────────
-
-    @GetMapping("/config")
-    public ResponseEntity<Map<String, Object>> getConfig() {
-        Map<String, Object> config = new HashMap<>();
-        config.put("simulationEnabled", !"prod".equalsIgnoreCase(appEnv));
-        return ResponseEntity.ok(config);
-    }
+    @Value("${app.frontend-url:http://localhost:3000}")
+    private String frontendUrl;
 
     // ── Tạo link thanh toán ───────────────────────────────────────────────────
 
@@ -83,21 +77,13 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getById(user, id));
     }
 
-    @Value("${spring.profiles.active:dev}")
-    private String activeProfile;
-
-    /**
-     * Xac nhan chuyen khoan gia lap cho payment VNPAY/MoMo trong moi truong demo.
-     */
-    @PostMapping("/{id}/simulate-bank-transfer")
-    public ResponseEntity<PaymentResponse> simulateBankTransfer(
+    @PostMapping("/{id}/retry")
+    public ResponseEntity<PaymentResponse> retryPayment(
             @AuthenticationPrincipal User user,
-            @PathVariable Long id) {
-
-        if ("prod".equalsIgnoreCase(appEnv)) {
-            throw new com.ecommerce.ecommercebackend.exception.BadRequestException("Simulated bank transfer is disabled in production.");
-        }
-        return ResponseEntity.ok(paymentService.simulateBankTransfer(user, id));
+            @PathVariable Long id,
+            HttpServletRequest httpRequest) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(paymentService.retry(user, id, getClientIp(httpRequest)));
     }
 
     // ── VNPAY Callback (redirect từ trình duyệt) ─────────────────────────────
@@ -110,22 +96,14 @@ public class PaymentController {
      * KHÔNG nên dùng để cập nhật trạng thái đơn hàng (dùng IPN thay thế).</p>
      */
     @GetMapping("/vnpay/callback")
-    public ResponseEntity<Map<String, Object>> vnpayCallback(
+    public ResponseEntity<Void> vnpayCallback(
             @RequestParam Map<String, String> params) {
 
         log.info("[VNPAY CALLBACK] Nhận callback: vnp_ResponseCode={}",
                 params.get("vnp_ResponseCode"));
 
-        String responseCode = params.getOrDefault("vnp_ResponseCode", "");
-        boolean success = "00".equals(responseCode);
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("success", success);
-        result.put("message", success ? "Thanh toán thành công" : "Thanh toán thất bại hoặc bị huỷ");
-        result.put("orderId", params.get("vnp_TxnRef"));
-        result.put("amount",  params.get("vnp_Amount"));
-
-        return ResponseEntity.ok(result);
+        Long paymentId = paymentService.handleVnpayReturn(params);
+        return redirectToFrontend(paymentId);
     }
 
     // ── VNPAY IPN (server-to-server) ─────────────────────────────────────────
@@ -136,19 +114,17 @@ public class PaymentController {
      *
      * <p>Đây là kênh đáng tin cậy nhất để cập nhật trạng thái đơn hàng.</p>
      */
-    @PostMapping("/vnpay/ipn")
+    @RequestMapping(value = "/vnpay/ipn", method = {RequestMethod.GET, RequestMethod.POST})
     public ResponseEntity<Map<String, String>> vnpayIpn(
             @RequestParam Map<String, String> params) {
 
         log.info("[VNPAY IPN] Nhận IPN: vnp_TxnRef={}, vnp_ResponseCode={}",
                 params.get("vnp_TxnRef"), params.get("vnp_ResponseCode"));
 
-        paymentService.handleVnpayIpn(params);
-
-        // VNPAY yêu cầu backend trả về đúng format này
+        PaymentService.IpnResult result = paymentService.handleVnpayIpn(params);
         Map<String, String> response = new HashMap<>();
-        response.put("RspCode", "00");
-        response.put("Message", "Confirm Success");
+        response.put("RspCode", result.code());
+        response.put("Message", result.message());
         return ResponseEntity.ok(response);
     }
 
@@ -159,22 +135,14 @@ public class PaymentController {
      * Endpoint public — không cần JWT.
      */
     @GetMapping("/momo/callback")
-    public ResponseEntity<Map<String, Object>> momoCallback(
+    public ResponseEntity<Void> momoCallback(
             @RequestParam Map<String, String> params) {
 
         log.info("[MOMO CALLBACK] Nhận callback: resultCode={}",
                 params.get("resultCode"));
 
-        String resultCode = params.getOrDefault("resultCode", "-1");
-        boolean success = "0".equals(resultCode);
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("success", success);
-        result.put("message", success ? "Thanh toán thành công" : "Thanh toán thất bại hoặc bị huỷ");
-        result.put("orderId", params.get("orderId"));
-        result.put("amount",  params.get("amount"));
-
-        return ResponseEntity.ok(result);
+        Long paymentId = paymentService.handleMomoReturn(params);
+        return redirectToFrontend(paymentId);
     }
 
     // ── MoMo IPN (server-to-server) ──────────────────────────────────────────
@@ -185,13 +153,18 @@ public class PaymentController {
      */
     @PostMapping("/momo/ipn")
     public ResponseEntity<Void> momoIpn(
-            @RequestBody Map<String, String> params) {
+            @RequestBody Map<String, Object> body) {
+
+        Map<String, String> params = body.entrySet().stream()
+                .filter(entry -> entry.getValue() != null)
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().toString()));
 
         log.info("[MOMO IPN] Nhận IPN: orderId={}, resultCode={}",
                 params.get("orderId"), params.get("resultCode"));
 
-        paymentService.handleMomoIpn(params);
-        return ResponseEntity.noContent().build();
+        return paymentService.handleMomoIpn(params)
+                ? ResponseEntity.noContent().build()
+                : ResponseEntity.badRequest().build();
     }
 
     // ── Utility ──────────────────────────────────────────────────────────────
@@ -207,5 +180,17 @@ public class PaymentController {
             ip = ip.split(",")[0].trim();
         }
         return ip != null ? ip : "127.0.0.1";
+    }
+
+    private ResponseEntity<Void> redirectToFrontend(Long paymentId) {
+        String base = frontendUrl.endsWith("/")
+                ? frontendUrl.substring(0, frontendUrl.length() - 1)
+                : frontendUrl;
+        String target = paymentId == null
+                ? base + "/checkout/success?error=payment_not_found"
+                : base + "/checkout/success?paymentId=" + paymentId;
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, URI.create(target).toString())
+                .build();
     }
 }

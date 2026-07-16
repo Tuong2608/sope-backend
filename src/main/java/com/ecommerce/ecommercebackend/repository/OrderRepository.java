@@ -4,6 +4,8 @@ import com.ecommerce.ecommercebackend.entity.Order;
 import com.ecommerce.ecommercebackend.entity.OrderStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -28,6 +30,10 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     /** Lookup by the business key shared with the payment module. */
     Optional<Order> findByOrderCode(String orderCode);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM Order o WHERE o.orderCode = :orderCode")
+    Optional<Order> findLockedByOrderCode(@Param("orderCode") String orderCode);
 
     boolean existsByOrderCode(String orderCode);
 

@@ -11,7 +11,9 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.ResponseEntity;
@@ -39,6 +41,8 @@ public class VnpayService {
     private static final String VNP_CURR_CODE = "VND";
     private static final String VNP_LOCALE = "vn";
     private static final String VNP_ORDER_TYPE = "other";
+    private static final DateTimeFormatter VNP_DATE = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     // ── Tạo link thanh toán ───────────────────────────────────────────────────
 
@@ -51,9 +55,16 @@ public class VnpayService {
      * @param ipAddress IP của người dùng (dùng "127.0.0.1" cho test)
      * @return URL trang thanh toán VNPAY
      */
-    public String createPaymentUrl(String orderId, Long amount, String orderInfo, String ipAddress) {
-        String txnRef = orderId + "_" + System.currentTimeMillis();
-        String createDate = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
+    public String createPaymentUrl(
+            String txnRef,
+            Long amount,
+            String orderInfo,
+            String ipAddress,
+            String bankCode,
+            LocalDateTime expiresAt) {
+        requireConfigured();
+        LocalDateTime now = LocalDateTime.now(VIETNAM_ZONE);
+        String createDate = now.format(VNP_DATE);
 
         // Build sorted param map (VNPAY yêu cầu sắp xếp theo alphabet)
         Map<String, String> params = new TreeMap<>();
@@ -69,22 +80,27 @@ public class VnpayService {
         params.put("vnp_ReturnUrl",  vnpayConfig.getReturnUrl());
         params.put("vnp_IpAddr",     ipAddress);
         params.put("vnp_CreateDate", createDate);
+        params.put("vnp_ExpireDate", expiresAt.format(VNP_DATE));
+        if (bankCode != null && !bankCode.isBlank()) {
+            params.put("vnp_BankCode", bankCode);
+        }
 
         // Tạo query string để ký
         StringBuilder hashData = new StringBuilder();
         StringBuilder query   = new StringBuilder();
         params.forEach((key, value) -> {
-            String encoded = URLEncoder.encode(value, StandardCharsets.US_ASCII);
+            String encodedKey = encode(key);
+            String encoded = encode(value);
             if (!hashData.isEmpty()) { hashData.append('&'); query.append('&'); }
-            hashData.append(key).append('=').append(value);
-            query.append(key).append('=').append(encoded);
+            hashData.append(encodedKey).append('=').append(encoded);
+            query.append(encodedKey).append('=').append(encoded);
         });
 
         String secureHash = hmacSHA512(vnpayConfig.getHashSecret(), hashData.toString());
         query.append("&vnp_SecureHash=").append(secureHash);
 
         String paymentUrl = vnpayConfig.getUrl() + "?" + query;
-        log.info("[VNPAY] Tạo link thanh toán cho đơn hàng {}: {}", orderId, txnRef);
+        log.info("[VNPAY] Đã tạo URL cho txnRef={}", txnRef);
         return paymentUrl;
     }
 
@@ -97,6 +113,7 @@ public class VnpayService {
      * @return {@code true} nếu chữ ký hợp lệ
      */
     public boolean verifySignature(Map<String, String> params) {
+        if (isBlank(vnpayConfig.getTmnCode()) || isBlank(vnpayConfig.getHashSecret())) return false;
         String receivedHash = params.get("vnp_SecureHash");
         if (receivedHash == null) return false;
 
@@ -108,13 +125,17 @@ public class VnpayService {
         StringBuilder hashData = new StringBuilder();
         cleanParams.forEach((key, value) -> {
             if (!hashData.isEmpty()) hashData.append('&');
-            hashData.append(key).append('=').append(value);
+            hashData.append(encode(key)).append('=').append(encode(value));
         });
 
         String expectedHash = hmacSHA512(vnpayConfig.getHashSecret(), hashData.toString());
         boolean valid = expectedHash.equalsIgnoreCase(receivedHash);
-        if (!valid) log.warn("[VNPAY] Chữ ký không hợp lệ! Expected: {}, Received: {}", expectedHash, receivedHash);
+        if (!valid) log.warn("[VNPAY] Chữ ký không hợp lệ");
         return valid;
+    }
+
+    public boolean hasExpectedTmnCode(Map<String, String> params) {
+        return Objects.equals(vnpayConfig.getTmnCode(), params.get("vnp_TmnCode"));
     }
 
     /**
@@ -126,7 +147,13 @@ public class VnpayService {
      */
     public PaymentStatus resolveStatus(Map<String, String> params) {
         String responseCode = params.getOrDefault("vnp_ResponseCode", "");
-        return "00".equals(responseCode) ? PaymentStatus.SUCCESS : PaymentStatus.FAILED;
+        String transactionStatus = params.getOrDefault("vnp_TransactionStatus", "");
+        if ("00".equals(responseCode) && "00".equals(transactionStatus)) {
+            return PaymentStatus.SUCCESS;
+        }
+        if ("24".equals(responseCode)) return PaymentStatus.CANCELLED;
+        if ("11".equals(responseCode)) return PaymentStatus.EXPIRED;
+        return PaymentStatus.FAILED;
     }
 
     /**
@@ -140,7 +167,7 @@ public class VnpayService {
 
     public Map<String, Object> queryTransaction(String orderId, String transDate, String ipAddress) {
         String requestId = UUID.randomUUID().toString();
-        String createDate = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
+        String createDate = LocalDateTime.now(VIETNAM_ZONE).format(VNP_DATE);
 
         Map<String, Object> params = new HashMap<>();
         params.put("vnp_RequestId", requestId);
@@ -166,7 +193,7 @@ public class VnpayService {
 
     public Map<String, Object> refundTransaction(String orderId, Long amount, String transDate, String user, String ipAddress) {
         String requestId = UUID.randomUUID().toString();
-        String createDate = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
+        String createDate = LocalDateTime.now(VIETNAM_ZONE).format(VNP_DATE);
 
         Map<String, Object> params = new HashMap<>();
         params.put("vnp_RequestId", requestId);
@@ -220,5 +247,20 @@ public class VnpayService {
         } catch (Exception e) {
             throw new RuntimeException("Lỗi khi tạo chữ ký HMAC-SHA512", e);
         }
+    }
+
+    private String encode(String value) {
+        return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8);
+    }
+
+    private void requireConfigured() {
+        if (isBlank(vnpayConfig.getTmnCode()) || isBlank(vnpayConfig.getHashSecret())
+                || isBlank(vnpayConfig.getUrl()) || isBlank(vnpayConfig.getReturnUrl())) {
+            throw new IllegalStateException("VNPAY Sandbox chưa được cấu hình đầy đủ");
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

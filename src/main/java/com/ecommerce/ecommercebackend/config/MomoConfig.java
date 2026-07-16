@@ -26,8 +26,14 @@ public class MomoConfig {
     private String endpoint;
 
     /** URL backend nhận redirect từ MoMo sau khi thanh toán. */
-    private String returnUrl;
+    private String redirectUrl;
 
-    /** URL backend nhận IPN (notify_url) từ MoMo. */
-    private String notifyUrl;
+    /** URL backend nhận IPN từ MoMo. */
+    private String ipnUrl;
+
+    /** Loại request đúng với merchant contract, mặc định captureWallet. */
+    private String requestType = "captureWallet";
+
+    private String queryEndpoint;
+    private String refundEndpoint;
 }

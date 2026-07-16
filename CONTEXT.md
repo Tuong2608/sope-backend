@@ -373,3 +373,15 @@ Khi kiểm tra API cần ghi:
 - H06: GET methods/zones/rates và PATCH trạng thái, chỉ ROLE_ADMIN; frontend dùng trực tiếp các endpoint này.
 - Kiểm tra: Maven test/package pass; runtime health/database UP; delivery estimate UTF-8 pass; catalog 162 phone/54 tablet/60 laptop; search iPhone 12 kết quả; chat proxy trả dữ liệu catalog thật.
 - Việc tiếp theo: cần credential admin hiện tại để smoke test runtime có JWT cho cart/H06; không tự đồng bộ/ghi đè mật khẩu admin trong DB.
+
+## 2026-07-17 - Nâng cấp Payment Sandbox
+
+- Yêu cầu: bỏ payment mô phỏng, hoàn thiện COD/VNPAY/MoMo Sandbox, chữ ký, callback/IPN, idempotency, retry và dữ liệu kết quả thật.
+- Package: config, controller, dto, entity, repository, service, resources migration và test.
+- Endpoint: giữ `POST /api/payment/create`, `GET /api/payment/{id}`; thêm `POST /api/payment/{id}/retry`; callback/IPN VNPAY và MoMo public đúng phạm vi; xóa `simulate-bank-transfer`.
+- Contract: request chỉ nhận orderId/provider/channel; amount/orderInfo lấy từ Order. Response có order/payment/provider metadata, signatureVerified, canRetry, payUrl/deeplink/QR URL thật.
+- Nghiệp vụ: IPN khóa Payment/Order và gọi `OrderService.markAsPaid`; tồn kho/coupon chỉ xử lý ở lần chuyển PENDING->PAID. Return không hoàn tất giao dịch.
+- Database: Flyway baseline 0, migration V1/V2 cho payments; test H2 tắt Flyway.
+- Bảo mật: payment/DB/JWT/admin secret đọc environment; CORS dùng APP_FRONTEND_ORIGINS; không log secret/raw signature.
+- Kiểm tra cuối: `mvnw.cmd clean test` qua 10 suite/42 test, không failure/error; `mvnw.cmd package -DskipTests` pass. Chưa test provider thật do thiếu credential/Ngrok.
+- Tiếp theo: điền env ngoài Git, chạy Ngrok và smoke test theo `../PAYMENT_SETUP_GUIDE.md`.
