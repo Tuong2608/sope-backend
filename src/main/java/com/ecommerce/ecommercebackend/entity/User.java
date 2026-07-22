@@ -85,6 +85,12 @@ public class User implements UserDetails {
     @Column(name = "password_reset_token_expires_at")
     private LocalDateTime passwordResetTokenExpiresAt;
 
+    @Column(name = "email_verification_token_hash", length = 64)
+    private String emailVerificationTokenHash;
+
+    @Column(name = "email_verification_token_expires_at")
+    private LocalDateTime emailVerificationTokenExpiresAt;
+
     // ── UserDetails contract ──────────────────────────────────────────────────
 
     @Override
