@@ -385,3 +385,13 @@ Khi kiểm tra API cần ghi:
 - Bảo mật: payment/DB/JWT/admin secret đọc environment; CORS dùng APP_FRONTEND_ORIGINS; không log secret/raw signature.
 - Kiểm tra cuối: `mvnw.cmd clean test` qua 10 suite/42 test, không failure/error; `mvnw.cmd package -DskipTests` pass. Chưa test provider thật do thiếu credential/Ngrok.
 - Tiếp theo: điền env ngoài Git, chạy Ngrok và smoke test theo `../PAYMENT_SETUP_GUIDE.md`.
+
+## 2026-07-23 - Gửi email thật (SMTP) cho quên mật khẩu & xác nhận đăng ký
+
+- Yêu cầu: quên mật khẩu chưa gửi được mail xác nhận (trước đó chỉ log giả lập); setup toàn bộ hạ tầng gửi email thật (SMTP Gmail) cho quên mật khẩu, đồng thời thêm xác nhận email khi đăng ký.
+- Đã sửa: `pom.xml` (thêm `spring-boot-starter-mail`); `entity/User.java` (thêm `emailVerificationTokenHash`, `emailVerificationTokenExpiresAt`); `repository/UserRepository.java` (thêm `findByEmailVerificationTokenHash`); `service/MailService.java` (mới); `service/AuthService.java`; `controller/AuthController.java`; `dto/request/VerifyEmailRequest.java` (mới); `test/service/AuthServiceTest.java` (mới, 7 test case).
+- Endpoint mới: `POST /api/auth/verify-email` `{ token }`.
+- Thay đổi: `MailService` dùng `JavaMailSender` gửi HTML đơn giản qua Gmail SMTP, gửi đồng bộ (không `@Async`), lỗi gửi mail chỉ log không chặn request. `requestPasswordReset()` gọi `mailService.sendPasswordResetEmail(...)` thay vì chỉ log. `register()` sinh thêm token xác thực email (tái sử dụng `generateResetToken()`/`hashToken()` có sẵn), lưu `emailVerificationTokenHash`/`Expires`, gửi mail xác nhận. `verifyEmail(token)` set `emailVerified = true`. **Đăng ký KHÔNG chặn đăng nhập** khi chưa xác thực email — giữ nguyên luồng đăng ký → tự đăng nhập hiện tại của frontend.
+- Config mới (đã thêm ở `application.properties` cục bộ, **không commit** vì file bị `skip-worktree`): `spring.mail.host/port/username/password`, `app.mail.from`, `app.email-verification.expiration-minutes`, `app.frontend.base-url`.
+- Kiểm tra: `mvnw.cmd -DskipTests compile` → BUILD SUCCESS; `mvnw.cmd test -Dtest=AuthServiceTest` → 7/7 pass; test tay qua browser (đăng ký tài khoản mới + quên mật khẩu) với Gmail thật, xác nhận cả 2 email đều tới hộp thư.
+- Lưu ý: `application.properties` chứa secret (Gmail App Password) nên các dòng cấu hình mail **không xuất hiện trong git**. Teammate cần tự thêm block SMTP vào file cục bộ của mình để email hoạt động — nếu chưa cấu hình, gửi mail sẽ lỗi âm thầm (chỉ log lỗi) nhưng KHÔNG chặn đăng ký/quên mật khẩu.
