@@ -51,6 +51,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final AuthenticationManager authenticationManager;
     private final GoogleIdTokenVerifier googleIdTokenVerifier;
+    private final MailService mailService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     private static final String RESET_MESSAGE =
@@ -64,6 +65,9 @@ public class AuthService {
 
     @Value("${app.password-reset.expiration-minutes:30}")
     private long passwordResetExpirationMinutes;
+
+    @Value("${app.email-verification.expiration-minutes:1440}")
+    private long emailVerificationExpirationMinutes;
 
     @Transactional
     public void register(RegisterRequest request) {
@@ -79,6 +83,7 @@ public class AuthService {
                     "Email '" + email + "' is already registered.");
         }
 
+        String verificationToken = generateResetToken();
         User user = User.builder()
                 .username(username)
                 .password(passwordEncoder.encode(request.getPassword()))
@@ -86,9 +91,14 @@ public class AuthService {
                 .role(Role.ROLE_USER)
                 .provider(AuthProvider.LOCAL)
                 .emailVerified(false)
+                .emailVerificationTokenHash(hashToken(verificationToken))
+                .emailVerificationTokenExpiresAt(LocalDateTime.now().plusMinutes(emailVerificationExpirationMinutes))
                 .build();
 
         userRepository.save(user);
+
+        String verifyLink = buildVerificationLink(verificationToken);
+        mailService.sendVerificationEmail(email, verifyLink);
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -121,11 +131,27 @@ public class AuthService {
         userRepository.save(account);
 
         String resetLink = buildResetLink(token);
-        log.info("Simulating email send... Reset link for {}: {}", email, resetLink);
+        mailService.sendPasswordResetEmail(email, resetLink);
 
         return PasswordResetResponse.builder()
                 .message(RESET_MESSAGE)
                 .build();
+    }
+
+    @Transactional
+    public void verifyEmail(String token) {
+        User user = userRepository.findByEmailVerificationTokenHash(hashToken(token.trim()))
+                .orElseThrow(() -> new BadRequestException("Verification token is invalid or expired."));
+        LocalDateTime expiresAt = user.getEmailVerificationTokenExpiresAt();
+        if (expiresAt == null || expiresAt.isBefore(LocalDateTime.now())) {
+            clearEmailVerificationToken(user);
+            userRepository.save(user);
+            throw new BadRequestException("Verification token is invalid or expired.");
+        }
+
+        user.setEmailVerified(true);
+        clearEmailVerificationToken(user);
+        userRepository.save(user);
     }
 
     @Transactional
@@ -305,6 +331,20 @@ public class AuthService {
     private void clearPasswordResetToken(User user) {
         user.setPasswordResetTokenHash(null);
         user.setPasswordResetTokenExpiresAt(null);
+    }
+
+    private String buildVerificationLink(String token) {
+        String baseUrl = frontendBaseUrl == null ? "" : frontendBaseUrl.trim();
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+        String encodedToken = URLEncoder.encode(token, StandardCharsets.UTF_8);
+        return baseUrl + "/verify-email?token=" + encodedToken;
+    }
+
+    private void clearEmailVerificationToken(User user) {
+        user.setEmailVerificationTokenHash(null);
+        user.setEmailVerificationTokenExpiresAt(null);
     }
 
     private String generateOAuthPasswordHash() {

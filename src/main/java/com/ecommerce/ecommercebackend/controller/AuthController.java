@@ -5,6 +5,7 @@ import com.ecommerce.ecommercebackend.dto.request.ForgotPasswordRequest;
 import com.ecommerce.ecommercebackend.dto.request.LoginRequest;
 import com.ecommerce.ecommercebackend.dto.request.RegisterRequest;
 import com.ecommerce.ecommercebackend.dto.request.ResetPasswordRequest;
+import com.ecommerce.ecommercebackend.dto.request.VerifyEmailRequest;
 import com.ecommerce.ecommercebackend.dto.response.AuthResponse;
 import com.ecommerce.ecommercebackend.dto.response.PasswordResetResponse;
 import com.ecommerce.ecommercebackend.service.AuthService;
@@ -69,6 +70,12 @@ public class AuthController {
     public ResponseEntity<String> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
         return ResponseEntity.ok("Password reset successfully.");
+    }
+
+    @PostMapping("/verify-email")
+    public ResponseEntity<String> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        authService.verifyEmail(request.getToken());
+        return ResponseEntity.ok("Email verified successfully.");
     }
 
     /**
