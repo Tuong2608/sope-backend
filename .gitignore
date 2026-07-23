@@ -25,3 +25,8 @@ start-payment-local.ps1
 *.ipr
 .vscode/
 build/
+
+application-secrets.properties
+src/main/resources/application-secrets.properties
+.env
+.env.*

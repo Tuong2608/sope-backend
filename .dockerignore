@@ -1,27 +1,9 @@
-# Thư mục build và target của Java/Maven
-target/
-build/
-out/
-.gradle/
-
-# Cấu hình của các IDE
-.idea/
-.vscode/
-*.iml
-*.ipr
-*.iws
-.settings/
-.classpath
-.project
-
-# Git và các file hệ thống
-.git/
-.gitignore
-.gitattributes
-
-# Maven wrapper files không cần cho giai đoạn runtime (ngoại trừ khi build)
-mvnw.cmd
-
-# File rác hệ điều hành
-Thumbs.db
-.DS_Store
+.git
+.github
+.idea
+.vscode
+target
+*.log
+.env
+.env.*
+README.md
