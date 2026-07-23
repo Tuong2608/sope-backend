@@ -20,6 +20,7 @@ import java.util.List;
 public class OrderResponse {
 
     private Long id;
+    private Long userId;
     private String orderCode;
     private OrderStatus status;
     private PaymentMethod paymentMethod;
@@ -39,4 +40,5 @@ public class OrderResponse {
 
     private List<OrderItemResponse> items;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

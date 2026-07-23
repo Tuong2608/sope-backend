@@ -13,7 +13,10 @@ import com.ecommerce.ecommercebackend.repository.CartRepository;
 import com.ecommerce.ecommercebackend.repository.CouponRepository;
 import com.ecommerce.ecommercebackend.repository.CouponUsageRepository;
 import com.ecommerce.ecommercebackend.repository.OrderRepository;
+import com.ecommerce.ecommercebackend.service.event.OrderPlacedEvent;
+import com.ecommerce.ecommercebackend.service.event.OrderStatusChangedEvent;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,7 +53,7 @@ public class OrderService {
             new EnumMap<>(OrderStatus.class);
     static {
         ALLOWED_TRANSITIONS.put(OrderStatus.PENDING,
-                EnumSet.of(OrderStatus.PAID, OrderStatus.CANCELLED));
+                EnumSet.of(OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.CANCELLED));
         ALLOWED_TRANSITIONS.put(OrderStatus.PAID,
                 EnumSet.of(OrderStatus.PROCESSING, OrderStatus.CANCELLED));
         ALLOWED_TRANSITIONS.put(OrderStatus.PROCESSING,
@@ -69,6 +72,7 @@ public class OrderService {
     private final DeliveryEstimateService deliveryEstimateService; // C04/C06
     private final CouponRepository couponRepository; // D04/C07
     private final CouponUsageRepository couponUsageRepository; // hold/use/release history
+    private final ApplicationEventPublisher eventPublisher;
 
     // ── Create ──────────────────────────────────────────────────────────────────
 
@@ -141,6 +145,11 @@ public class OrderService {
         cart.getItems().clear();
         cartRepository.save(cart);
 
+        eventPublisher.publishEvent(new OrderPlacedEvent(
+                user.getId(),
+                saved.getId(),
+                saved.getOrderCode()));
+
         return toResponse(saved);
     }
 
@@ -195,6 +204,7 @@ public class OrderService {
         order.setStatus(OrderStatus.CANCELLED);
         Order saved = orderRepository.save(order);
         releaseCouponHold(saved);
+        publishStatusChanged(saved);
         return toResponse(saved);
     }
 
@@ -226,6 +236,7 @@ public class OrderService {
         // B08: Giảm tồn kho khi đơn hàng được thanh toán thành công
         inventoryService.deductStockForOrder(saved);
         markCouponUsed(saved);
+        publishStatusChanged(saved);
     }
 
     // ── Admin operations ──────────────────────────────────────────────────────────
@@ -259,12 +270,15 @@ public class OrderService {
     public OrderResponse updateStatus(Long id, OrderStatus newStatus) {
         Order order = findAnyOrThrow(id);
         OrderStatus oldStatus = order.getStatus();
-        assertValidTransition(oldStatus, newStatus);
+        assertValidTransition(order, newStatus);
 
         order.setStatus(newStatus);
         Order saved = orderRepository.save(order);
 
-        if (newStatus == OrderStatus.PAID) {
+        boolean activatesStock = newStatus == OrderStatus.PAID
+                || (oldStatus == OrderStatus.PENDING
+                    && newStatus == OrderStatus.PROCESSING);
+        if (activatesStock) {
             inventoryService.deductStockForOrder(saved);
             markCouponUsed(saved);
         } else if (newStatus == OrderStatus.CANCELLED) {
@@ -274,15 +288,37 @@ public class OrderService {
             releaseCouponHold(saved);
         }
 
+        publishStatusChanged(saved);
         return toResponse(saved);
     }
 
-    private void assertValidTransition(OrderStatus from, OrderStatus to) {
+    private void assertValidTransition(Order order, OrderStatus to) {
+        OrderStatus from = order.getStatus();
         Set<OrderStatus> allowed = ALLOWED_TRANSITIONS.getOrDefault(from, Set.of());
         if (!allowed.contains(to)) {
             throw new BadRequestException(
                     "Không thể chuyển trạng thái đơn hàng từ " + from + " sang " + to + ".");
         }
+
+        if (from == OrderStatus.PENDING) {
+            boolean isCod = order.getPaymentMethod() == PaymentMethod.COD;
+            if (isCod && to == OrderStatus.PAID) {
+                throw new BadRequestException(
+                        "Đơn COD cần được duyệt sang PROCESSING, không xác nhận PAID trước khi giao.");
+            }
+            if (!isCod && to == OrderStatus.PROCESSING) {
+                throw new BadRequestException(
+                        "Đơn thanh toán online phải được xác nhận PAID trước khi duyệt.");
+            }
+        }
+    }
+
+    private void publishStatusChanged(Order order) {
+        eventPublisher.publishEvent(new OrderStatusChangedEvent(
+                order.getUser().getId(),
+                order.getId(),
+                order.getOrderCode(),
+                order.getStatus()));
     }
 
     private Order findAnyOrThrow(Long id) {
@@ -345,6 +381,7 @@ public class OrderService {
 
         return OrderResponse.builder()
                 .id(order.getId())
+                .userId(order.getUser().getId())
                 .orderCode(order.getOrderCode())
                 .status(order.getStatus())
                 .paymentMethod(order.getPaymentMethod())
@@ -362,6 +399,7 @@ public class OrderService {
                 .note(order.getNote())
                 .items(items)
                 .createdAt(order.getCreatedAt())
+                .updatedAt(order.getUpdatedAt())
                 .build();
     }
 }

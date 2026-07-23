@@ -6,4 +6,6 @@ target
 *.log
 .env
 .env.*
+application-secrets.properties
+src/main/resources/application-secrets.properties
 README.md

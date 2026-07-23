@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 /**
  * Ensures a default administrator account exists on startup.
@@ -36,6 +37,10 @@ public class AdminSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        if (!StringUtils.hasText(adminPassword)) {
+            log.warn("APP_ADMIN_PASSWORD is empty; default admin account was not seeded");
+            return;
+        }
         if (userRepository.existsByUsername(adminUsername)) {
             return;
         }

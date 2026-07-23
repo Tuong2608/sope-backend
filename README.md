@@ -33,3 +33,25 @@ mvnw.cmd spring-boot:run        # Windows
 🟢 Server chạy tại: `http://localhost:8080`
 
 > Xem chi tiết tại [docs/02-cai-dat-va-chay.md](./docs/02-cai-dat-va-chay.md)
+
+## Deploy
+
+File `Dockerfile` tạo image Java 17 theo multi-stage build, chạy bằng user
+không có quyền root và kiểm tra health tại `/api/health`.
+
+Để deploy đủ MySQL + Backend + Chatbot + Frontend, dùng
+`../docker-compose.yml`, `../.env.example` và hướng dẫn
+`../DEPLOYMENT.md` từ root workspace. Không copy
+`application-secrets.properties` vào image; production phải truyền secret bằng
+environment/secret manager.
+
+Deploy backend riêng:
+
+```bash
+docker build -t sope-backend .
+docker run --rm -p 8080:8080 --env-file .env sope-backend
+```
+
+Các biến bắt buộc tối thiểu gồm database, `APP_JWT_SECRET`,
+`APP_ADMIN_PASSWORD`, `APP_FRONTEND_ORIGINS`, `CHATBOT_URL` và
+`CHATBOT_SECRET`.

@@ -15,6 +15,9 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import com.ecommerce.ecommercebackend.entity.Role;
+import com.ecommerce.ecommercebackend.entity.User;
+
 /**
  * Interceptor xác thực JWT khi client kết nối WebSocket qua STOMP.
  *
@@ -56,30 +59,49 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             }
         } else if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
             String destination = accessor.getDestination();
-            if (destination != null && destination.startsWith("/topic/chat.")) {
-                java.security.Principal principal = accessor.getUser();
-                if (principal == null) {
-                    throw new IllegalArgumentException("Từ chối SUBSCRIBE: Chưa xác thực (No Principal)");
-                }
-                
-                org.springframework.security.authentication.UsernamePasswordAuthenticationToken auth =
-                        (org.springframework.security.authentication.UsernamePasswordAuthenticationToken) principal;
-                Object authPrincipal = auth.getPrincipal();
-                
-                if (authPrincipal instanceof com.ecommerce.ecommercebackend.entity.User user) {
-                    if (user.getRole() != com.ecommerce.ecommercebackend.entity.Role.ROLE_ADMIN) {
-                        String userIdStr = String.valueOf(user.getId());
-                        if (!destination.contains("_" + userIdStr + "_") && !destination.endsWith("_" + userIdStr)) {
-                            log.warn("[WS] Từ chối SUBSCRIBE: User {} không có quyền truy cập {}", user.getUsername(), destination);
-                            throw new IllegalArgumentException("Từ chối SUBSCRIBE: Bạn không có quyền truy cập phòng này");
-                        }
+            if (destination == null) {
+                return message;
+            }
+
+            if (destination.startsWith("/topic/chat.")) {
+                User user = requireAuthenticatedUser(accessor);
+                if (user.getRole() != Role.ROLE_ADMIN) {
+                    String userIdStr = String.valueOf(user.getId());
+                    if (!destination.contains("_" + userIdStr + "_")
+                            && !destination.endsWith("_" + userIdStr)) {
+                        denySubscription(user, destination);
                     }
-                } else {
-                    throw new IllegalArgumentException("Từ chối SUBSCRIBE: Principal không hợp lệ");
+                }
+            } else if (destination.startsWith("/topic/notification.")) {
+                User user = requireAuthenticatedUser(accessor);
+                String ownTopic = "/topic/notification." + user.getId();
+                if (!destination.equals(ownTopic)) {
+                    denySubscription(user, destination);
+                }
+            } else if (destination.equals("/topic/admin.orders")) {
+                User user = requireAuthenticatedUser(accessor);
+                if (user.getRole() != Role.ROLE_ADMIN) {
+                    denySubscription(user, destination);
                 }
             }
         }
         return message;
+    }
+
+    private User requireAuthenticatedUser(StompHeaderAccessor accessor) {
+        java.security.Principal principal = accessor.getUser();
+        if (!(principal instanceof UsernamePasswordAuthenticationToken auth)
+                || !(auth.getPrincipal() instanceof User user)) {
+            throw new IllegalArgumentException("Từ chối SUBSCRIBE: Chưa xác thực.");
+        }
+        return user;
+    }
+
+    private void denySubscription(User user, String destination) {
+        log.warn("[WS] Từ chối SUBSCRIBE: User {} không có quyền truy cập {}",
+                user.getUsername(), destination);
+        throw new IllegalArgumentException(
+                "Từ chối SUBSCRIBE: Bạn không có quyền truy cập kênh này.");
     }
 
     /** Lấy token từ header Authorization hoặc native header "token". */

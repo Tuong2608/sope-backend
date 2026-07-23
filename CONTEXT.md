@@ -1,5 +1,28 @@
 # CONTEXT.md - Bộ nhớ riêng cho sope-backend
 
+## Cập nhật 2026-07-24 – Xóa trường URL dư của danh mục laptop
+
+- Đã xóa riêng trường `url` khỏi 50 sản phẩm có `category = "laptop"` trong `src/main/resources/data.json`.
+- Giữ nguyên 266 sản phẩm và toàn bộ dữ liệu còn lại; 54 trường `url` thuộc các danh mục khác không bị thay đổi.
+- Đã kiểm tra lại file bằng JSON parser: cú pháp hợp lệ, đủ 50 sản phẩm laptop và không còn laptop nào chứa trường `url`.
+
+## Cập nhật 2026-07-23 – Chuẩn bị deploy backend
+
+- `Dockerfile` dùng multi-stage Java 17, runtime non-root, `EXPOSE 8080` đúng với ứng dụng và healthcheck `/api/health`; build context loại `application-secrets.properties`.
+- Cấu hình production lấy Google Client ID, URL frontend/chatbot, database, JWT, admin, mail và payment từ environment. Đã bỏ URL Cloudflare tạm khỏi default VNPAY, bật forwarded headers và graceful shutdown.
+- `AdminSeeder` không tạo tài khoản admin mật khẩu rỗng; production Compose bắt buộc có `APP_ADMIN_PASSWORD`.
+- Full-stack dùng `../docker-compose.yml`; Backend kết nối `database:3306` và `chatbot:8000` trong private Docker network.
+- Kiểm tra: toàn bộ Maven test 65/65 pass, `mvnw.cmd package -DskipTests` pass, JAR mới chạy local và `/api/health` trả 200.
+
+## Cập nhật 2026-07-23 – Chatbot tra cứu trạng thái đơn cá nhân
+
+- `POST /api/chat` vẫn cho phép hỏi sản phẩm công khai và proxy sang FastAPI/Gemini.
+- Các câu hỏi về đơn cá nhân được `OrderChatService` nhận diện và xử lý trực tiếp trong Spring bằng principal JWT; dữ liệu đơn không được gửi sang LLM bên ngoài.
+- Tra cứu mã đơn bắt buộc dùng `findByOrderCodeAndUserId(orderCode, userId)`. Không dùng truy vấn mã đơn toàn cục nên không thể đọc đơn của tài khoản khác.
+- Hỗ trợ hỏi đơn mới nhất, danh sách đơn gần đây, mã `ORD-...`, và lọc theo trạng thái chờ duyệt/đã thanh toán/đang xử lý/đang giao/hoàn thành/đã hủy.
+- Người chưa đăng nhập nhận liên kết `/login`; câu trả lời chỉ có trạng thái, tiến trình, thanh toán, tổng tiền, thời gian giao và liên kết chi tiết, không trả địa chỉ hoặc số điện thoại.
+- Kiểm thử: `OrderChatServiceTest`, `ChatControllerTest`; toàn bộ Maven test có 65 test, 0 failure/error; JAR production đóng gói thành công và runtime health trả 200.
+
 ## 1. Vai trò của backend
 
 `sope-backend/` là phần backend Java Spring Boot của dự án SOPE.
@@ -395,3 +418,19 @@ Khi kiểm tra API cần ghi:
 - Config mới (đã thêm ở `application.properties` cục bộ, **không commit** vì file bị `skip-worktree`): `spring.mail.host/port/username/password`, `app.mail.from`, `app.email-verification.expiration-minutes`, `app.frontend.base-url`.
 - Kiểm tra: `mvnw.cmd -DskipTests compile` → BUILD SUCCESS; `mvnw.cmd test -Dtest=AuthServiceTest` → 7/7 pass; test tay qua browser (đăng ký tài khoản mới + quên mật khẩu) với Gmail thật, xác nhận cả 2 email đều tới hộp thư.
 - Lưu ý: `application.properties` chứa secret (Gmail App Password) nên các dòng cấu hình mail **không xuất hiện trong git**. Teammate cần tự thêm block SMTP vào file cục bộ của mình để email hoạt động — nếu chưa cấu hình, gửi mail sẽ lỗi âm thầm (chỉ log lỗi) nhưng KHÔNG chặn đăng ký/quên mật khẩu.
+## 2026-07-23 - Sửa JSON sản phẩm bị nối 200 + 500
+
+- Nguyên nhân: `ProductResponse` giữ nguyên các Hibernate lazy collection (`specs`, `storageVariants`, `colorVariants`, `reviews`). Sau khi transaction đóng, Jackson lỗi giữa lúc ghi response và GlobalExceptionHandler nối thêm body 500 vào JSON đã ghi một phần.
+- Đã sửa: `ProductService.toResponse()` sao chép các collection sang `LinkedHashMap`/`ArrayList` khi transaction còn mở; không đổi contract API hay schema database.
+- Test: thêm `ProductServiceTest` để bảo đảm DTO không còn phụ thuộc collection entity; thêm mail host giả trong test properties để context test không cần SMTP thật.
+- Endpoint kiểm tra: `GET /api/products` theo phone/laptop/tablet, sort `ratingStars`, và `GET /api/products/173` đều HTTP 200 với JSON parse hợp lệ.
+- Kết quả: `mvnw.cmd test` pass 50/50 test; frontend không còn nhận body JSON dạng `...]}{"status":500,...}`.
+
+## 2026-07-23 - Duyệt đơn COD và thông báo realtime sau commit
+
+- Yêu cầu: admin phải nhận thông báo khi khách đặt hàng; tiến trình xử lý đơn ở client/admin phải giống nhau.
+- Luồng nghiệp vụ: COD được admin duyệt trực tiếp `PENDING → PROCESSING`, đồng thời trừ tồn kho/chốt coupon; đơn online vẫn bắt buộc `PENDING → PAID → PROCESSING`. Các bước sau giữ `SHIPPING → COMPLETED`, hủy từ trạng thái hợp lệ sẽ hoàn tồn kho/coupon.
+- Realtime: `OrderService` phát `OrderPlacedEvent`/`OrderStatusChangedEvent`; `OrderNotificationListener` xử lý ở `AFTER_COMMIT` để tránh admin refresh trước khi DB thấy đơn; admin nhận `ADMIN_NEW_ORDER` tại `/topic/admin.orders`, chủ đơn nhận cập nhật trạng thái ở topic cá nhân.
+- Bảo mật WebSocket: chỉ `ROLE_ADMIN` subscribe được `/topic/admin.orders`; user chỉ subscribe được `/topic/notification.{ownId}`.
+- Contract: `OrderResponse` bổ sung `userId` và `updatedAt` để FE subscribe đúng user và hiển thị thời điểm cập nhật.
+- Test: bổ sung test OrderService cho duyệt COD/không bỏ qua thanh toán online, test listener/payload notification và phân quyền subscribe WebSocket.

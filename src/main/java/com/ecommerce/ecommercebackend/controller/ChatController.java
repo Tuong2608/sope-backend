@@ -6,6 +6,7 @@ import com.ecommerce.ecommercebackend.dto.response.ChatbotResponse;
 import com.ecommerce.ecommercebackend.dto.response.ChatSessionResponse;
 import com.ecommerce.ecommercebackend.dto.response.SaveChatResponse;
 import com.ecommerce.ecommercebackend.service.ChatService;
+import com.ecommerce.ecommercebackend.service.OrderChatService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -40,6 +41,7 @@ import java.util.List;
 public class ChatController {
 
     private final ChatService chatService;
+    private final OrderChatService orderChatService;
     private final RestTemplate restTemplate;
 
     @Value("${app.chatbot.url:http://localhost:8000}")
@@ -53,6 +55,13 @@ public class ChatController {
     public ResponseEntity<ChatbotResponse> chat(
             @Valid @RequestBody ChatbotRequest request,
             @AuthenticationPrincipal User user) {
+        var personalOrderAnswer = orderChatService.answer(user, request.getMessage());
+        if (personalOrderAnswer.isPresent()) {
+            ChatbotResponse response = new ChatbotResponse();
+            response.setReply(personalOrderAnswer.get());
+            return ResponseEntity.ok(response);
+        }
+
         String userId = user == null ? "anonymous" : String.valueOf(user.getId());
         try {
             ChatbotResponse response = restTemplate.postForObject(

@@ -16,11 +16,14 @@ import com.ecommerce.ecommercebackend.repository.CartRepository;
 import com.ecommerce.ecommercebackend.repository.CouponRepository;
 import com.ecommerce.ecommercebackend.repository.CouponUsageRepository;
 import com.ecommerce.ecommercebackend.repository.OrderRepository;
+import com.ecommerce.ecommercebackend.service.event.OrderPlacedEvent;
+import com.ecommerce.ecommercebackend.service.event.OrderStatusChangedEvent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -59,6 +62,9 @@ class OrderServiceTest {
 
     @Mock
     private CouponUsageRepository couponUsageRepository;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private OrderService orderService;
@@ -122,6 +128,7 @@ class OrderServiceTest {
         assertThat(response.getItems().get(0).getQuantity()).isEqualTo(2);
         assertThat(cart.getItems()).isEmpty();
         verify(cartRepository).save(cart);
+        verify(eventPublisher).publishEvent(any(OrderPlacedEvent.class));
     }
 
     @Test
@@ -144,6 +151,7 @@ class OrderServiceTest {
     @Test
     void updateStatusFromPendingToPaidDeductsStock() {
         Order order = orderInStatus(OrderStatus.PENDING);
+        order.setPaymentMethod(PaymentMethod.VNPAY);
         when(orderRepository.findById(1L)).thenReturn(java.util.Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
         when(couponUsageRepository.findByOrderId(order.getId())).thenReturn(java.util.Optional.empty());
@@ -153,6 +161,34 @@ class OrderServiceTest {
         assertThat(response.getStatus()).isEqualTo(OrderStatus.PAID);
         verify(inventoryService).deductStockForOrder(order);
         verify(inventoryService, never()).restoreStockForOrder(any(Order.class));
+        verify(eventPublisher).publishEvent(any(OrderStatusChangedEvent.class));
+    }
+
+    @Test
+    void updateStatusApprovesCodDirectlyFromPendingToProcessing() {
+        Order order = orderInStatus(OrderStatus.PENDING);
+        when(orderRepository.findById(1L)).thenReturn(java.util.Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
+        when(couponUsageRepository.findByOrderId(order.getId())).thenReturn(java.util.Optional.empty());
+
+        OrderResponse response = orderService.updateStatus(1L, OrderStatus.PROCESSING);
+
+        assertThat(response.getStatus()).isEqualTo(OrderStatus.PROCESSING);
+        verify(inventoryService).deductStockForOrder(order);
+        verify(eventPublisher).publishEvent(any(OrderStatusChangedEvent.class));
+    }
+
+    @Test
+    void updateStatusRejectsProcessingUnpaidOnlineOrder() {
+        Order order = orderInStatus(OrderStatus.PENDING);
+        order.setPaymentMethod(PaymentMethod.MOMO);
+        when(orderRepository.findById(1L)).thenReturn(java.util.Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateStatus(1L, OrderStatus.PROCESSING))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("PAID");
+
+        verify(orderRepository, never()).save(any(Order.class));
     }
 
     @Test

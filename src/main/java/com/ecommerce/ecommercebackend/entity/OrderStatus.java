@@ -3,8 +3,9 @@ package com.ecommerce.ecommercebackend.entity;
 /**
  * Lifecycle status of a customer order (task C07).
  *
- * <p>Valid transitions: {@code PENDING → PAID → PROCESSING → SHIPPING → COMPLETED},
- * with {@code CANCELLED} reachable from {@code PENDING}/{@code PAID}/{@code PROCESSING}.
+ * <p>Online orders use {@code PENDING → PAID → PROCESSING → SHIPPING → COMPLETED}.
+ * COD orders are approved with {@code PENDING → PROCESSING → SHIPPING → COMPLETED}.
+ * {@code CANCELLED} is reachable from {@code PENDING}/{@code PAID}/{@code PROCESSING}.
  * {@code COMPLETED} and {@code CANCELLED} are terminal. Enforced in
  * {@code OrderService.assertValidTransition}.</p>
  */
@@ -13,7 +14,7 @@ public enum OrderStatus {
     PENDING,
     /** Đã thanh toán thành công (đồng bộ từ IPN của cổng thanh toán hoặc admin xác nhận). */
     PAID,
-    /** Đang được xử lý/đóng gói sau khi thanh toán. */
+    /** Đã được admin duyệt và đang được xử lý/đóng gói. */
     PROCESSING,
     /** Đang giao hàng. */
     SHIPPING,

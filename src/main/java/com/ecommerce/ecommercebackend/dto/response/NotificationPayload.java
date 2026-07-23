@@ -36,6 +36,8 @@ public class NotificationPayload {
         NEW_MESSAGE,
         /** Đơn hàng đã được đặt thành công. */
         ORDER_PLACED,
+        /** Có đơn hàng mới cần quản trị viên kiểm tra và duyệt. */
+        ADMIN_NEW_ORDER,
         /** Thanh toán hoàn tất. */
         PAYMENT_SUCCESS,
         /** Thanh toán thất bại. */

@@ -30,6 +30,8 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class NotificationService {
 
+    public static final String ADMIN_ORDER_TOPIC = "/topic/admin.orders";
+
     private final SimpMessagingTemplate messagingTemplate;
 
     // ── Destination builder ───────────────────────────────────────────────────
@@ -80,14 +82,30 @@ public class NotificationService {
      * @param userId  ID người đặt hàng
      * @param orderId Mã đơn hàng
      */
-    public void notifyOrderPlaced(Long userId, String orderId) {
+    public void notifyOrderPlaced(Long userId, String orderId, String orderCode) {
         send(userId, NotificationPayload.builder()
                 .type(NotificationPayload.NotificationType.ORDER_PLACED)
                 .title("Đặt hàng thành công")
-                .message("Đơn hàng #" + orderId + " đã được tạo thành công")
+                .message("Đơn hàng " + orderCode + " đã được tạo thành công")
                 .referenceId(orderId)
                 .timestamp(LocalDateTime.now())
                 .build());
+    }
+
+    /**
+     * Broadcasts a newly committed order to every connected admin client.
+     */
+    public void notifyAdminNewOrder(String orderId, String orderCode) {
+        NotificationPayload payload = NotificationPayload.builder()
+                .type(NotificationPayload.NotificationType.ADMIN_NEW_ORDER)
+                .title("Có đơn hàng mới cần duyệt")
+                .message("Đơn hàng " + orderCode + " vừa được tạo")
+                .referenceId(orderId)
+                .timestamp(LocalDateTime.now())
+                .build();
+        messagingTemplate.convertAndSend(ADMIN_ORDER_TOPIC, payload);
+        log.info("[NOTIFY] → {} | orderId={} | orderCode={}",
+                ADMIN_ORDER_TOPIC, orderId, orderCode);
     }
 
     // ── Trigger: Thanh toán thành công ───────────────────────────────────────
@@ -135,11 +153,16 @@ public class NotificationService {
      * @param orderId   Mã đơn hàng
      * @param newStatus Trạng thái mới (ví dụ: "SHIPPED", "DELIVERED")
      */
-    public void notifyOrderStatusUpdated(Long userId, String orderId, String newStatus) {
+    public void notifyOrderStatusUpdated(
+            Long userId,
+            String orderId,
+            String orderCode,
+            String newStatus
+    ) {
         send(userId, NotificationPayload.builder()
                 .type(NotificationPayload.NotificationType.ORDER_STATUS_UPDATED)
                 .title("Cập nhật đơn hàng")
-                .message("Đơn hàng #" + orderId + " đã chuyển sang trạng thái: " + newStatus)
+                .message("Đơn hàng " + orderCode + " đã chuyển sang trạng thái: " + newStatus)
                 .referenceId(orderId)
                 .timestamp(LocalDateTime.now())
                 .build());

@@ -266,10 +266,21 @@ public class ProductService {
                 .mainThumbnail(product.getMainThumbnail())
                 .imgUrl(resolvedImg)
                 .images(normalizedImages)
-                .specs(product.getSpecs())
-                .storageVariants(product.getStorageVariants())
-                .colorVariants(product.getColorVariants())
-                .reviews(product.getReviews())
+                // Detach lazy Hibernate collections while the transaction is
+                // still open. Returning PersistentMap/PersistentBag instances
+                // makes JSON serialization fail after this method returns.
+                .specs(product.getSpecs() == null
+                        ? new LinkedHashMap<>()
+                        : new LinkedHashMap<>(product.getSpecs()))
+                .storageVariants(product.getStorageVariants() == null
+                        ? new ArrayList<>()
+                        : new ArrayList<>(product.getStorageVariants()))
+                .colorVariants(product.getColorVariants() == null
+                        ? new ArrayList<>()
+                        : new ArrayList<>(product.getColorVariants()))
+                .reviews(product.getReviews() == null
+                        ? new ArrayList<>()
+                        : new ArrayList<>(product.getReviews()))
                 // B03: Inventory fields
                 .status(product.getStatus())
                 .availableQuantity(product.getAvailableQuantity())
