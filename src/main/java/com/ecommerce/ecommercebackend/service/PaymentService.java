@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -24,6 +25,7 @@ public class PaymentService {
 
     private static final int PAYMENT_EXPIRY_MINUTES = 15;
     private static final Set<String> VNPAY_CHANNELS = Set.of("VNPAYQR", "VNBANK", "INTCARD");
+    private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     public record IpnResult(String code, String message) {}
 
@@ -47,7 +49,7 @@ public class PaymentService {
                         List.of(PaymentStatus.PENDING, PaymentStatus.PROCESSING));
         if (activeAttempt.isPresent()) {
             Payment existing = activeAttempt.get();
-            if (existing.getExpiredAt() == null || !existing.getExpiredAt().isAfter(LocalDateTime.now())) {
+            if (existing.getExpiredAt() == null || !existing.getExpiredAt().isAfter(LocalDateTime.now(VIETNAM_ZONE))) {
                 if (existing.getStatus() != PaymentStatus.SUCCESS) {
                     existing.setStatus(PaymentStatus.EXPIRED);
                     existing.setResponseMessage("Giao dịch đã hết hạn");
@@ -60,7 +62,7 @@ public class PaymentService {
             }
         }
 
-        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(PAYMENT_EXPIRY_MINUTES);
+        LocalDateTime expiresAt = LocalDateTime.now(VIETNAM_ZONE).plusMinutes(PAYMENT_EXPIRY_MINUTES);
         String providerOrderId = generateProviderOrderId(request.getProvider());
         String providerRequestId = request.getProvider() == PaymentProvider.MOMO
                 ? "REQ" + UUID.randomUUID().toString().replace("-", "")
@@ -243,7 +245,7 @@ public class PaymentService {
         }
         payment.setStatus(newStatus);
         if (newStatus == PaymentStatus.SUCCESS) {
-            payment.setPaidAt(LocalDateTime.now());
+            payment.setPaidAt(LocalDateTime.now(VIETNAM_ZONE));
             orderService.markAsPaid(payment.getOrderId());
         }
     }
@@ -384,7 +386,7 @@ public class PaymentService {
                 || payment.getStatus() == PaymentStatus.EXPIRED) return true;
         return payment.getStatus() == PaymentStatus.PENDING
                 && (payment.getExpiredAt() == null
-                || !payment.getExpiredAt().isAfter(LocalDateTime.now()));
+                || !payment.getExpiredAt().isAfter(LocalDateTime.now(VIETNAM_ZONE)));
     }
 
     private PaymentResponse toResponse(Payment payment, Order order) {
