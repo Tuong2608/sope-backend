@@ -1,12 +1,15 @@
 package com.ecommerce.ecommercebackend.config;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+
+import java.util.Arrays;
 
 /**
  * Cấu hình WebSocket Server sử dụng STOMP message broker.
@@ -49,6 +52,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final WebSocketAuthInterceptor webSocketAuthInterceptor;
 
+    @Value("${app.frontend.origins:https://sope-frontend-self.vercel.app,http://localhost:3000,http://127.0.0.1:3000}")
+    private String frontendOrigins;
+
     // ── Task 5: Cấu hình Message Broker ──────────────────────────────────────
 
     @Override
@@ -67,13 +73,18 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        String[] allowedOrigins = Arrays.stream(frontendOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toArray(String[]::new);
+
         // Native WebSocket endpoint (dùng cho frontend Next.js với ws://)
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*");
+                .setAllowedOrigins(allowedOrigins);
 
         // SockJS fallback endpoint (dùng khi ws:// bị block bởi proxy/firewall)
         registry.addEndpoint("/ws-sockjs")
-                .setAllowedOriginPatterns("*")
+                .setAllowedOrigins(allowedOrigins)
                 .withSockJS();
     }
 

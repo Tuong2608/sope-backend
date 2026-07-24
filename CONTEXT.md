@@ -1,5 +1,16 @@
 # CONTEXT.md - Bộ nhớ riêng cho sope-backend
 
+## Cập nhật 2026-07-24 – Chuẩn hóa CORS production
+
+- Yêu cầu: rà soát lỗi CORS giữa Vercel `sope-frontend-self.vercel.app` và Render `sope-backend-wezh.onrender.com`.
+- Security/CORS: giữ một `CorsConfigurationSource` REST tại `SecurityConfig`; bỏ `@CrossOrigin("*")` khỏi product/recommendation; cho phép OPTIONS trước auth và bỏ qua OPTIONS trong JWT/rate-limit filter.
+- Origin: `app.frontend.origins` đọc `APP_FRONTEND_ORIGINS`; fallback cho phép Vercel production, localhost và 127.0.0.1. WebSocket/STOMP dùng cùng danh sách origin cụ thể thay cho wildcard.
+- Header: cho phép Authorization, Content-Type, Accept, Origin, X-Requested-With và Idempotency-Key; credentials vẫn bật và không dùng wildcard.
+- Endpoint kiểm tra: OPTIONS/GET `/api/products/3`, GET `/api/products/3/reviews`, GET `/api/coupons/available?productId=3`.
+- Production tại thời điểm kiểm tra đã trả đúng CORS/HTTP 200 và ID 3 tồn tại; origin lạ bị HTTP 403. Cần redeploy code để nhận phần hardening mới.
+- Kiểm tra local: Maven test 65/65 pass; `mvnw.cmd clean package -DskipTests` build JAR thành công.
+- Tài liệu deploy và lệnh kiểm tra: `../CORS_DEPLOYMENT_FIX.md`. Không thay đổi JWT role, OAuth, payment, endpoint hoặc database.
+
 ## Cập nhật 2026-07-24 – Xóa trường URL dư của danh mục laptop
 
 - Đã xóa riêng trường `url` khỏi 50 sản phẩm có `category = "laptop"` trong `src/main/resources/data.json`.

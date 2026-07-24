@@ -49,7 +49,7 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final UserDetailsService      userDetailsService;
 
-    @Value("${app.frontend.origins:http://localhost:3000,http://127.0.0.1:3000}")
+    @Value("${app.frontend.origins:https://sope-frontend-self.vercel.app,http://localhost:3000,http://127.0.0.1:3000}")
     private String frontendOrigins;
 
     // ── Security filter chain ─────────────────────────────────────────────────
@@ -67,6 +67,8 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // CORS preflight must be evaluated before authentication/authorization.
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
                         // Public catalog browsing: anyone can read products and their reviews.
@@ -143,7 +145,14 @@ public class SecurityConfig {
                 .filter(origin -> !origin.isEmpty())
                 .toList());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Origin"));
+        config.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type",
+                "Accept",
+                "Origin",
+                "X-Requested-With",
+                "Idempotency-Key"
+        ));
         config.setExposedHeaders(List.of("Authorization"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
