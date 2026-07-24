@@ -77,6 +77,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/recommendations/**").permitAll()
                         // Interaction dataset for the AI recommendation engine (service-to-service).
                         .requestMatchers(HttpMethod.GET, "/api/ratings").permitAll()
+                        // Authenticated by X-Service-Key inside the controller.
+                        .requestMatchers(HttpMethod.GET, "/api/internal/chatbot/products").permitAll()
                         // Payment callbacks/IPN — called by VNPAY/MoMo servers, no JWT available.
                         .requestMatchers("/api/payment/vnpay/callback", "/api/payment/vnpay/ipn",
                                          "/api/payment/momo/callback",  "/api/payment/momo/ipn").permitAll()

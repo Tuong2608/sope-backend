@@ -3,14 +3,20 @@ package com.ecommerce.ecommercebackend.exception;
 import com.ecommerce.ecommercebackend.dto.response.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotWritableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
+import org.apache.catalina.connector.ClientAbortException;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
@@ -73,6 +79,11 @@ public class GlobalExceptionHandler {
                 "Invalid username or password.");
     }
 
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex) {
+        return buildResponse(HttpStatus.FORBIDDEN, "Forbidden", "Access is denied.");
+    }
+
     // ── Validation exceptions ─────────────────────────────────────────────────
 
     /**
@@ -100,6 +111,36 @@ public class GlobalExceptionHandler {
         return buildResponse(status, status.getReasonPhrase(), message);
     }
 
+    @ExceptionHandler({ClientAbortException.class, AsyncRequestNotUsableException.class})
+    public void handleClientDisconnect(Exception ex) {
+        log.debug("event=http_client_disconnect errorType={}", ex.getClass().getSimpleName());
+    }
+
+    @ExceptionHandler(IOException.class)
+    public void handleIOException(IOException ex) throws IOException {
+        if (isClientDisconnect(ex)) {
+            log.debug("event=http_client_disconnect errorType={}", ex.getClass().getSimpleName());
+            return;
+        }
+        throw ex;
+    }
+
+    @ExceptionHandler(HttpMessageNotWritableException.class)
+    public ResponseEntity<ErrorResponse> handleMessageNotWritable(
+            HttpMessageNotWritableException ex) {
+        if (isClientDisconnect(ex)) {
+            log.debug(
+                    "event=http_client_disconnect errorType={}",
+                    ex.getClass().getSimpleName());
+            return null;
+        }
+        log.error("Response serialization failed", ex);
+        return buildResponse(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Internal Server Error",
+                "The response could not be written.");
+    }
+
     // ── Catch-all ─────────────────────────────────────────────────────────────
 
     /**
@@ -125,5 +166,22 @@ public class GlobalExceptionHandler {
                 .build();
 
         return ResponseEntity.status(status).body(body);
+    }
+
+    private boolean isClientDisconnect(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null) {
+                String normalized = message.toLowerCase(Locale.ROOT);
+                if (normalized.contains("broken pipe")
+                        || normalized.contains("connection reset by peer")
+                        || normalized.contains("connection reset")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

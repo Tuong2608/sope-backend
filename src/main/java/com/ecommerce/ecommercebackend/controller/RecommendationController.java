@@ -3,8 +3,8 @@ package com.ecommerce.ecommercebackend.controller;
 import com.ecommerce.ecommercebackend.dto.response.ProductResponse;
 import com.ecommerce.ecommercebackend.service.ProductService;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -43,11 +43,18 @@ import java.util.List;
 @Slf4j
 @RestController
 @RequestMapping("/api/recommendations")
-@RequiredArgsConstructor
 public class RecommendationController {
 
     private final ProductService productService;
-    private final RestTemplate restTemplate;
+    private final RestTemplate recommendationRestTemplate;
+
+    public RecommendationController(
+            ProductService productService,
+            @Qualifier("chatbotRecommendationRestTemplate")
+            RestTemplate recommendationRestTemplate) {
+        this.productService = productService;
+        this.recommendationRestTemplate = recommendationRestTemplate;
+    }
 
     @Value("${app.chatbot.url:http://localhost:8000}")
     private String chatbotUrl;
@@ -77,13 +84,16 @@ public class RecommendationController {
     // ── Hàm bóc tách JSON dùng chung (Đã điều chỉnh tham số URL) ────────
     private List<Long> fetchSimilarIdsFromPython(Long productId, int topN, String urlTemplate) {
         try {
-            PythonRecommendResponse response = restTemplate.getForObject(
+            PythonRecommendResponse response = recommendationRestTemplate.getForObject(
                     urlTemplate, PythonRecommendResponse.class, productId, topN);
             return (response != null && response.productIds != null)
                     ? response.productIds
                     : List.of();
         } catch (RestClientException e) {
-            log.warn("Không gọi được Python AI service cho productId={}: {}", productId, e.getMessage());
+            log.warn(
+                    "event=chatbot_recommendation status=fallback_empty productId={} errorType={}",
+                    productId,
+                    e.getClass().getSimpleName());
             return List.of();
         }
     }

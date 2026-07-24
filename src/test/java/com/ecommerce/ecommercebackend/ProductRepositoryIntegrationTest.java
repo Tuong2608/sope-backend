@@ -9,10 +9,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -96,5 +99,37 @@ class ProductRepositoryIntegrationTest {
 
         assertThat(report.hasErrors()).isFalse();
         assertThat(report.errorCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("Chatbot projection reads scalar data and specs without loading heavy DTOs")
+    void shouldReadChatbotProjectionAndSpecificationEntries() {
+        Product product = Product.builder()
+                .sku("CHATBOT-1")
+                .name("SOPE Phone X1")
+                .brand("SOPE")
+                .category("phone")
+                .shortDescription("A compact phone for projection testing")
+                .price(10_000_000L)
+                .status(ProductStatus.ACTIVE)
+                .stockQuantity(5)
+                .specs(new LinkedHashMap<>(Map.of(
+                        "Chip xử lý", "SOPE X1",
+                        "RAM", "8 GB")))
+                .build();
+        Product saved = productRepository.saveAndFlush(product);
+
+        var page = productRepository.findChatbotProducts(
+                ProductStatus.INACTIVE,
+                PageRequest.of(0, 15));
+        var specEntries = productRepository.findChatbotProductSpecEntries(
+                List.of(saved.getId()));
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().get(0).getShortDescription())
+                .isEqualTo("A compact phone for projection testing");
+        assertThat(specEntries)
+                .extracting(row -> String.valueOf(row[1]) + "=" + row[2])
+                .containsExactlyInAnyOrder("Chip xử lý=SOPE X1", "RAM=8 GB");
     }
 }

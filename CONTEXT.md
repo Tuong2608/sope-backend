@@ -1,5 +1,26 @@
 # CONTEXT.md - Bộ nhớ riêng cho sope-backend
 
+## Cập nhật 2026-07-24 – Tách timeout chatbot và endpoint catalog nhẹ
+
+- `RestTemplateConfig` có hai client riêng: chat dùng connect/read 5s/75s,
+  recommendation dùng 5s/15s; các giá trị lấy từ environment thay vì đổi
+  timeout HTTP dùng chung.
+- Thêm `GET /api/internal/chatbot/products` có pagination, giới hạn size 30 và
+  xác thực constant-time qua `X-Service-Key`/`CHATBOT_SECRET`.
+- `ChatbotProductResponse` chỉ chứa scalar cần cho chat/CBF. Repository dùng
+  constructor projection, cắt short description 300 ký tự và tải specs của
+  cả page bằng một batch query; service ghép `specificationSummary` tối đa
+  1.500 ký tự, không serialize entity/variants/reviews/images.
+- Recommendation timeout/5xx/network error trả danh sách rỗng; API product
+  detail vẫn độc lập. Chat upstream lỗi được chuyển thành JSON 502/503 có
+  kiểm soát qua exception handler.
+- `ClientAbortException`, `AsyncRequestNotUsableException` và IOException có
+  nguyên nhân broken pipe/connection reset chỉ log ngắn ở DEBUG, không cố ghi
+  response lần hai; IOException khác vẫn được ném lại.
+- Test controller, isolation, timeout/5xx, service key, broken pipe và query
+  projection chạy bằng mock/H2, không gọi network thật. Full suite gần nhất:
+  73 test pass; integration projection riêng: 5 test pass.
+
 ## Cập nhật 2026-07-24 – Chuẩn hóa CORS production
 
 - Yêu cầu: rà soát lỗi CORS giữa Vercel `sope-frontend-self.vercel.app` và Render `sope-backend-wezh.onrender.com`.

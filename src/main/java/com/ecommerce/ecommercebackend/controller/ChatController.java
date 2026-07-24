@@ -8,7 +8,7 @@ import com.ecommerce.ecommercebackend.dto.response.SaveChatResponse;
 import com.ecommerce.ecommercebackend.service.ChatService;
 import com.ecommerce.ecommercebackend.service.OrderChatService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -37,12 +37,20 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/chat")
-@RequiredArgsConstructor
 public class ChatController {
 
     private final ChatService chatService;
     private final OrderChatService orderChatService;
-    private final RestTemplate restTemplate;
+    private final RestTemplate chatRestTemplate;
+
+    public ChatController(
+            ChatService chatService,
+            OrderChatService orderChatService,
+            @Qualifier("chatbotChatRestTemplate") RestTemplate chatRestTemplate) {
+        this.chatService = chatService;
+        this.orderChatService = orderChatService;
+        this.chatRestTemplate = chatRestTemplate;
+    }
 
     @Value("${app.chatbot.url:http://localhost:8000}")
     private String chatbotUrl;
@@ -64,7 +72,7 @@ public class ChatController {
 
         String userId = user == null ? "anonymous" : String.valueOf(user.getId());
         try {
-            ChatbotResponse response = restTemplate.postForObject(
+            ChatbotResponse response = chatRestTemplate.postForObject(
                     chatbotUrl.replaceAll("/+$", "") + "/api/chat",
                     new FastApiChatRequest(userId, request.getMessage()),
                     ChatbotResponse.class);

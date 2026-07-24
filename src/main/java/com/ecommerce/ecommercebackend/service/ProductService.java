@@ -3,6 +3,7 @@ package com.ecommerce.ecommercebackend.service;
 import com.ecommerce.ecommercebackend.dto.request.ProductRequest;
 import com.ecommerce.ecommercebackend.dto.response.PagedResponse;
 import com.ecommerce.ecommercebackend.dto.response.ProductResponse;
+import com.ecommerce.ecommercebackend.dto.response.ChatbotProductResponse;
 import com.ecommerce.ecommercebackend.entity.CrawledReview;
 import com.ecommerce.ecommercebackend.entity.Product;
 import com.ecommerce.ecommercebackend.entity.ProductStatus;
@@ -23,8 +24,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -71,6 +74,44 @@ public class ProductService {
                 .stream()
                 .map(this::toResponse)
                 .toList(); // Nếu dùng Java bản cũ hơn 16, dùng .collect(Collectors.toList())
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<ChatbotProductResponse> getChatbotProducts(Pageable pageable) {
+        Page<ChatbotProductResponse> page =
+                productRepository.findChatbotProducts(ProductStatus.INACTIVE, pageable);
+        List<Long> productIds = page.getContent().stream()
+                .map(ChatbotProductResponse::getId)
+                .toList();
+        if (!productIds.isEmpty()) {
+            Map<Long, StringBuilder> summaries = new HashMap<>();
+            for (Object[] row : productRepository.findChatbotProductSpecEntries(productIds)) {
+                if (row.length < 3 || row[0] == null || row[1] == null || row[2] == null) {
+                    continue;
+                }
+                Long productId = (Long) row[0];
+                StringBuilder summary = summaries.computeIfAbsent(
+                        productId, ignored -> new StringBuilder());
+                appendSpecification(summary, String.valueOf(row[1]), String.valueOf(row[2]));
+            }
+            page.getContent().forEach(product -> {
+                StringBuilder summary = summaries.get(product.getId());
+                product.setSpecificationSummary(
+                        summary == null || summary.isEmpty() ? null : summary.toString());
+            });
+        }
+        return PagedResponse.from(page);
+    }
+
+    private void appendSpecification(StringBuilder target, String key, String value) {
+        final int maxSummaryLength = 1_500;
+        if (target.length() >= maxSummaryLength) {
+            return;
+        }
+        String prefix = target.isEmpty() ? "" : "; ";
+        String entry = prefix + key + ": " + value;
+        int remaining = maxSummaryLength - target.length();
+        target.append(entry, 0, Math.min(entry.length(), remaining));
     }
     // ── Read (search / filter / paginate) ───────────────────────────────────────
 
