@@ -1,5 +1,12 @@
 # CONTEXT.md - Bộ nhớ riêng cho sope-backend
 
+## Cập nhật 2026-07-24 – Bổ sung tài khoản admin demo vào README
+
+- `README.md` đã ghi tài khoản admin mặc định: username `admin`, password `admin123`.
+- Backend đọc thông tin đăng nhập quản trị từ `APP_ADMIN_USERNAME` và `APP_ADMIN_PASSWORD`.
+- Thông tin trên chỉ dùng cho local/demo; khi triển khai production phải cấu hình mật khẩu mạnh và bí mật qua biến môi trường.
+- Thay đổi lần này chỉ cập nhật tài liệu, không thay đổi mã nguồn hay cấu hình runtime.
+
 ## Cập nhật 2026-07-24 – README mô tả và cấu trúc toàn dự án
 
 - Mở rộng `README.md` với vai trò nghiệp vụ backend, sơ đồ tích hợp

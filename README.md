@@ -36,6 +36,18 @@ Các service production:
 | Spring Boot API | [https://sope-backend-wezh.onrender.com/](https://sope-backend-wezh.onrender.com/) |
 | FastAPI Chatbot | [https://chatbot-tmdt.onrender.com/](https://chatbot-tmdt.onrender.com/) |
 
+## Tài khoản admin mặc định
+
+| Thông tin | Giá trị |
+|---|---|
+| Tên đăng nhập | `admin` |
+| Mật khẩu | `admin123` |
+
+Backend đọc thông tin khởi tạo admin từ `APP_ADMIN_USERNAME` và
+`APP_ADMIN_PASSWORD`. Giá trị trên chỉ dành cho local/demo; khi deploy
+production phải thay `APP_ADMIN_PASSWORD` bằng mật khẩu mạnh và không commit
+credential production vào Git.
+
 ## Cấu trúc dự án
 
 ```text
