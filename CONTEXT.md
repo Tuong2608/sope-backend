@@ -1,5 +1,18 @@
 # CONTEXT.md - Bộ nhớ riêng cho sope-backend
 
+## Cập nhật 2026-07-24 – README mô tả và cấu trúc toàn dự án
+
+- Mở rộng `README.md` với vai trò nghiệp vụ backend, sơ đồ tích hợp
+  FE → BE → MySQL/chatbot/payment/mail, link deploy của cả ba service và cây
+  thư mục thực tế.
+- Mô tả trách nhiệm từng package `config`, `controller`, `dto`, `entity`,
+  `exception`, `repository`, `security`, `seeder`, `service`, `specification`,
+  `util`.
+- Hướng dẫn chạy local dùng Java 17/MySQL/Maven Wrapper và
+  `application-secrets.properties` bị Git ignore; ghi rõ Spring không tự đọc
+  `.env` khi chạy Maven trực tiếp.
+- Chỉ thay tài liệu, không đổi endpoint, runtime, database hoặc API contract.
+
 ## Cập nhật 2026-07-24 – Tách timeout chatbot và endpoint catalog nhẹ
 
 - `RestTemplateConfig` có hai client riêng: chat dùng connect/read 5s/75s,

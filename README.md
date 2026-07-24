@@ -2,6 +2,88 @@
 
 Backend RESTful API cho dự án SOPE, xây dựng bằng **Spring Boot 4**, **MySQL** và **JWT Authentication**.
 
+## Mô tả dự án
+
+SOPE Backend là trung tâm nghiệp vụ và bảo mật của toàn hệ thống:
+
+- Cung cấp REST API cho Next.js frontend.
+- Quản lý người dùng, JWT/cookie, role user/admin và Google Login.
+- Quản lý catalog, tìm kiếm/lọc sản phẩm, tồn kho và biến thể.
+- Xử lý giỏ hàng, coupon, giao hàng, đơn hàng và trạng thái đơn.
+- Tích hợp thanh toán COD, VNPAY và MoMo.
+- Phát thông báo đơn hàng realtime qua WebSocket/STOMP.
+- Proxy chat từ frontend sang FastAPI; dữ liệu đơn cá nhân vẫn được xử lý ở
+  Spring Boot và không gửi sang LLM.
+- Gọi recommendation như tính năng phụ; timeout sẽ fallback danh sách rỗng.
+- Cấp endpoint catalog projection nhẹ, bảo vệ bằng service key, cho chatbot.
+
+Kiến trúc triển khai:
+
+```text
+Browser
+  → Next.js Frontend
+  → Spring Boot Backend
+      ├── MySQL
+      ├── FastAPI Chatbot → Gemini
+      └── VNPAY/MoMo/SMTP
+```
+
+Các service production:
+
+| Thành phần | Link deploy |
+|---|---|
+| Website SOPE | [https://sope-frontend-self.vercel.app/](https://sope-frontend-self.vercel.app/) |
+| Spring Boot API | [https://sope-backend-wezh.onrender.com/](https://sope-backend-wezh.onrender.com/) |
+| FastAPI Chatbot | [https://chatbot-tmdt.onrender.com/](https://chatbot-tmdt.onrender.com/) |
+
+## Cấu trúc dự án
+
+```text
+sope-backend/
+├── src/
+│   ├── main/
+│   │   ├── java/com/ecommerce/ecommercebackend/
+│   │   │   ├── config/          # Bean, CORS, WebSocket, HTTP client
+│   │   │   ├── controller/      # REST API và controller admin
+│   │   │   ├── dto/             # Request/response DTO
+│   │   │   ├── entity/          # JPA entity và enum nghiệp vụ
+│   │   │   ├── exception/       # Custom/global exception handling
+│   │   │   ├── repository/      # Spring Data JPA query
+│   │   │   ├── security/        # JWT, filter và authentication
+│   │   │   ├── seeder/          # Dữ liệu khởi tạo idempotent
+│   │   │   ├── service/         # Business logic
+│   │   │   ├── specification/   # Product filter/search động
+│   │   │   ├── util/            # Helper dùng chung
+│   │   │   └── EcommerceBackendApplication.java
+│   │   └── resources/
+│   │       ├── db/              # Flyway migration
+│   │       ├── application.properties
+│   │       └── data.json        # Catalog seed
+│   └── test/                    # Unit và integration test
+├── docs/                        # Tài liệu cài đặt/API/workflow
+├── .env.example                 # Mẫu environment
+├── Dockerfile                   # Java 17 multi-stage image
+├── pom.xml                      # Maven dependency/build config
+├── mvnw / mvnw.cmd              # Maven Wrapper
+└── README.md
+```
+
+Vai trò từng package:
+
+| Package | Chức năng |
+|---|---|
+| `config` | CORS, WebSocket, RestTemplate, bean và cấu hình framework |
+| `controller` | Nhận HTTP request, validate và gọi service |
+| `dto` | Contract request/response, không trả entity trực tiếp |
+| `entity` | Mô hình dữ liệu MySQL qua JPA/Hibernate |
+| `exception` | Chuyển exception thành JSON response có kiểm soát |
+| `repository` | Truy vấn database và projection |
+| `security` | JWT, cookie, filter, role và rate limiting |
+| `seeder` | Seed admin, catalog, lịch nghỉ và vận chuyển |
+| `service` | Nghiệp vụ auth, product, cart, order, payment, chat |
+| `specification` | Ghép điều kiện tìm kiếm/lọc product |
+| `util` | Hàm format/parse/ảnh dùng chung |
+
 ---
 
 ## 📚 Tài liệu
@@ -17,22 +99,72 @@ Backend RESTful API cho dự án SOPE, xây dựng bằng **Spring Boot 4**, **M
 
 ## ⚡ Chạy nhanh
 
-```bash
-# 1. Clone
-git clone git@github.com:Tuong2608/sope-backend.git
-cd sope-backend
+Yêu cầu:
 
-# 2. Cấu hình database trong:
-# src/main/resources/application.properties
+- Java 17.
+- MySQL 8.
+- Chatbot tại `http://localhost:8000` nếu cần dùng chat/recommendation.
 
-# 3. Chạy
-mvnw.cmd spring-boot:run        # Windows
-./mvnw spring-boot:run           # Linux / macOS
+Windows PowerShell:
+
+```powershell
+.\mvnw.cmd spring-boot:run
 ```
 
-🟢 Server chạy tại: `http://localhost:8080`
+macOS/Linux:
 
-> Xem chi tiết tại [docs/02-cai-dat-va-chay.md](./docs/02-cai-dat-va-chay.md)
+```bash
+cp .env.example .env
+./mvnw spring-boot:run
+```
+
+Khi chạy Maven trực tiếp, cấu hình secret theo một trong hai cách:
+
+1. Đặt environment variables trong IDE/terminal.
+2. Tạo file `application-secrets.properties` tại root `sope-backend/`.
+
+`application.properties` đã import file local này bằng:
+
+```properties
+spring.config.import=optional:file:./application-secrets.properties
+```
+
+Ví dụ nội dung local:
+
+```properties
+spring.datasource.username=root
+spring.datasource.password=<your-mysql-password>
+app.jwt.secret=<base64-secret-at-least-32-bytes>
+app.admin.password=<your-local-admin-password>
+app.chatbot.secret=<same-value-as-chatbot-SOPE_SERVICE_KEY>
+```
+
+`application-secrets.properties` đã được Git ignore. Không commit file này,
+không copy secret thật vào `application.properties`. File `.env` chỉ được Docker
+Compose/`docker run --env-file` đọc, Spring Boot không tự đọc `.env` khi chạy
+Maven trực tiếp.
+
+Server mặc định:
+
+```text
+http://localhost:8080
+```
+
+Health:
+
+```powershell
+Invoke-RestMethod "http://localhost:8080/api/health"
+```
+
+Test và build:
+
+```powershell
+.\mvnw.cmd test
+.\mvnw.cmd -DskipTests package
+```
+
+Xem hướng dẫn chi tiết tại
+[docs/02-cai-dat-va-chay.md](./docs/02-cai-dat-va-chay.md).
 
 ## Deploy
 
@@ -55,3 +187,8 @@ docker run --rm -p 8080:8080 --env-file .env sope-backend
 Các biến bắt buộc tối thiểu gồm database, `APP_JWT_SECRET`,
 `APP_ADMIN_PASSWORD`, `APP_FRONTEND_ORIGINS`, `CHATBOT_URL` và
 `CHATBOT_SECRET`.
+
+Production:
+
+- Backend: [https://sope-backend-wezh.onrender.com/](https://sope-backend-wezh.onrender.com/)
+- Website: [https://sope-frontend-self.vercel.app/](https://sope-frontend-self.vercel.app/)
